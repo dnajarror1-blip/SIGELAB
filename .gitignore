@@ -1,0 +1,30 @@
+# Maven
+target/
+
+# IntelliJ IDEA
+.idea/
+*.iml
+
+# Configuración privada
+.env
+.env.*
+!.env.example
+!.env.docker.example
+!.gitignore
+
+# Python
+.venv/
+__pycache__/
+.pytest_cache/
+*.pyc
+
+# Archivos temporales
+*.log
+logs/
+.DS_Store
+Thumbs.db
+
+# Datos biométricos locales
+facial-service/models/
+facial-service/captures/
+facial-service/embeddings/
