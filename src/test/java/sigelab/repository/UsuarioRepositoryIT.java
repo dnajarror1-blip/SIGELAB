@@ -23,4 +23,23 @@ class UsuarioRepositoryIT {
     void usuarioInexistenteDevuelveVacio() throws Exception {
         assertTrue(repo.buscarPorUsername("no_existe_xyz").isEmpty());
     }
+
+    @Test
+    void guardaUsuarioYAsignaId() throws Exception {
+        UsuarioRepository repo = new UsuarioRepository();
+
+        Usuario nuevo = new Usuario();
+        nuevo.setNombre("Nuevo");
+        nuevo.setApellido("Guardado");
+        nuevo.setUsername("test_guardar_" + System.currentTimeMillis());
+        nuevo.setPasswordHash("hash_de_prueba");
+        nuevo.setCorreo("guardar@correo.test");
+        nuevo.setIdRol(1);
+        nuevo.setEstado(EstadoUsuario.ACTIVO);
+
+        Usuario guardado = repo.guardar(nuevo);
+
+        assertNotNull(guardado.getIdUsuario());
+        assertTrue(repo.buscarPorUsername(nuevo.getUsername()).isPresent());
+    }
 }
