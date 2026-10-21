@@ -6,6 +6,7 @@ import sigelab.model.Usuario;
 import sigelab.repository.UsuarioRepository;
 
 import java.sql.SQLException;
+import java.util.Optional;
 
 public class UsuarioService {
 
@@ -45,5 +46,37 @@ public class UsuarioService {
 
         // Lo guardamos y devolvemos el usuario ya con su id
         return usuarioRepository.guardar(u);
+    }
+    // Revisa usuario y contraseña. Si todo está bien devuelve el usuario.
+    // TEMPORAL: igual que arriba, luego cambiamos las excepciones por las del equipo
+    public Usuario autenticar(String username, String passwordPlano) throws SQLException {
+
+        // Si no escribieron nada, ni vale la pena ir a la base
+        if (username == null || username.isBlank() || passwordPlano == null) {
+            throw new IllegalArgumentException("Usuario o contraseña incorrectos");
+        }
+
+        // Buscamos al usuario por su username
+        Optional<Usuario> encontrado = usuarioRepository.buscarPorUsername(username);
+
+        // Si no existe, damos el mismo mensaje que con contraseña mala,
+        // así nadie puede adivinar qué usernames existen
+        if (encontrado.isEmpty()) {
+            throw new IllegalArgumentException("Usuario o contraseña incorrectos");
+        }
+        Usuario u = encontrado.get();
+
+        // Comparamos lo que escribió con el hash guardado
+        if (!BCrypt.checkpw(passwordPlano, u.getPasswordHash())) {
+            throw new IllegalArgumentException("Usuario o contraseña incorrectos");
+        }
+
+        // Aunque la contraseña esté bien, un usuario que no está activo no entra
+        if (u.getEstado() != EstadoUsuario.ACTIVO) {
+            throw new IllegalArgumentException("El usuario no está activo");
+        }
+
+
+        return u;
     }
 }

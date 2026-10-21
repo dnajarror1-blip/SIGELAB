@@ -39,4 +39,32 @@ class UsuarioServiceIT {
         assertThrows(IllegalArgumentException.class, () ->
                 service.crearUsuario("Ana", "Prueba", "x_corta", "123", "c@correo.test", 1));
     }
+    @Test
+    void loginCorrectoDevuelveElUsuario() throws Exception {
+        // Creamos un usuario para poder entrar con él
+        String username = "test_login_" + System.currentTimeMillis();
+        service.crearUsuario("Luis", "Prueba", username, "clave123", "luis@correo.test", 1);
+
+        // Entramos con los datos correctos
+        Usuario u = service.autenticar(username, "clave123");
+
+        assertEquals(username, u.getUsername());
+    }
+
+    @Test
+    void loginConContrasenaIncorrectaFalla() throws Exception {
+        String username = "test_mala_" + System.currentTimeMillis();
+        service.crearUsuario("Luis", "Prueba", username, "clave123", "luis2@correo.test", 1);
+
+        // Contraseña equivocada: tiene que lanzar error
+        assertThrows(IllegalArgumentException.class, () ->
+                service.autenticar(username, "otra_clave"));
+    }
+
+    @Test
+    void loginConUsuarioInexistenteFalla() {
+        // Este username no existe en la base
+        assertThrows(IllegalArgumentException.class, () ->
+                service.autenticar("no_existe_xyz_123", "clave123"));
+    }
 }
