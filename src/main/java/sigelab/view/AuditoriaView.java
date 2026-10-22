@@ -14,11 +14,11 @@ import javax.swing.JTextField;
 import javax.swing.ListSelectionModel;
 import javax.swing.table.DefaultTableModel;
 import sigelab.model.Auditoria;
-import sigelab.service.AuditoriaService;
+import sigelab.service.AuditService;
 
 public class AuditoriaView extends JPanel {
 
-    private final AuditoriaService auditoriaService;
+    private final AuditService auditoriaService;
 
     private JTable tablaAuditoria;
     private DefaultTableModel modeloTabla;
@@ -28,10 +28,10 @@ public class AuditoriaView extends JPanel {
     private JButton btnLimpiar;
 
     public AuditoriaView() {
-        this(new AuditoriaService());
+        this(new AuditService());
     }
 
-    public AuditoriaView(AuditoriaService auditoriaService) {
+    public AuditoriaView(AuditService auditoriaService) {
         this.auditoriaService = auditoriaService;
         initComponents();
         cargarDatos();

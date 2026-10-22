@@ -8,11 +8,11 @@ import static org.junit.jupiter.api.Assertions.*;
 
 class AuditoriaServiceTest {
 
-    private AuditoriaService auditoriaService;
+    private AuditService auditoriaService;
 
     @BeforeEach
     void setUp() {
-        auditoriaService = new AuditoriaService();
+        auditoriaService = new AuditService();
     }
 
     @Test

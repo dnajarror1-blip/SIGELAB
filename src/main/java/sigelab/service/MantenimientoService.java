@@ -19,15 +19,15 @@ public class MantenimientoService {
 
     private final MantenimientoRepository mantenimientoRepository;
     private final EquipoRepository equipoRepository;
-    private final AuditoriaService auditoriaService;
+    private final AuditService auditoriaService;
 
     public MantenimientoService() {
-        this(new MantenimientoRepository(), new EquipoRepository(), new AuditoriaService());
+        this(new MantenimientoRepository(), new EquipoRepository(), new AuditService());
     }
 
     public MantenimientoService(MantenimientoRepository mantenimientoRepository,
                                 EquipoRepository equipoRepository,
-                                AuditoriaService auditoriaService) {
+                                AuditService auditoriaService) {
         this.mantenimientoRepository = mantenimientoRepository;
         this.equipoRepository = equipoRepository;
         this.auditoriaService = auditoriaService;
