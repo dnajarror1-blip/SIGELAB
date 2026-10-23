@@ -1,0 +1,34 @@
+
+name: SIGELAB - Pruebas Maven
+
+on:
+  pull_request:
+    branches:
+      - develop
+
+  push:
+    branches:
+      - develop
+
+permissions:
+  contents: read
+
+jobs:
+  pruebas-unitarias:
+    name: Pruebas unitarias Java 21
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Descargar codigo
+        uses: actions/checkout@v6
+
+      - name: Configurar Java 21
+        uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+
+      - name: Ejecutar pruebas Maven
+        run: bash ./mvnw -B -ntp test
