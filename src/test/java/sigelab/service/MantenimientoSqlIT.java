@@ -1,5 +1,7 @@
+
 package sigelab.service;
 
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import sigelab.config.DatabaseConfig;
 import sigelab.enums.ResultadoMantenimiento;
@@ -10,34 +12,48 @@ import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.*;
 
-/**
- * Prueba de integración que modifica EXCLUSIVAMENTE SIGELAB_TEST_MAINT.
- * No se ejecuta con el patrón normal de Surefire (*Test); invocar explícitamente.
- */
 class MantenimientoSqlIT {
 
     private static final int ID_EQUIPO = 1;
     private static final int ID_USUARIO = 1;
 
+    private int idMantenimientoCreado;
+    private String descripcionPrueba;
+
+    @AfterEach
+    void limpiarDatosDePrueba() throws SQLException {
+        if (idMantenimientoCreado > 0) {
+            LimpiezaMantenimientoIT.limpiar(
+                    idMantenimientoCreado,
+                    ID_EQUIPO,
+                    descripcionPrueba
+            );
+        }
+    }
+
     @Test
     void probarIngresoYCierreConAuditoria() throws Exception {
+
+        // Bloquear la ejecucion fuera de la base de pruebas.
         assertEquals(
                 "SIGELAB_TEST_MAINT",
                 System.getenv("DB_NAME"),
-                "Configure DB_NAME=SIGELAB_TEST_MAINT antes de ejecutar"
+                "Configure DB_NAME=SIGELAB_TEST_MAINT"
         );
 
         try (Connection conn = DatabaseConfig.getConnection()) {
             assertEquals(
                     "SIGELAB_TEST_MAINT",
                     conn.getCatalog(),
-                    "La conexión no apunta a la base aislada de pruebas"
+                    "La conexion no apunta a la base de pruebas"
             );
         }
 
+        // Verificar los datos iniciales.
         assertEquals(
                 "EQ-MAINT-TEST-001",
                 consultarValor(
@@ -45,75 +61,121 @@ class MantenimientoSqlIT {
                         ID_EQUIPO
                 )
         );
+
         assertEquals(
                 "DISPONIBLE",
-                consultarValor("SELECT estado FROM dbo.Equipo WHERE id_equipo = ?", ID_EQUIPO)
+                consultarValor(
+                        "SELECT estado FROM dbo.Equipo WHERE id_equipo = ?",
+                        ID_EQUIPO
+                )
         );
+
         assertEquals(
                 "ACTIVO",
-                consultarValor("SELECT estado FROM dbo.Usuario WHERE id_usuario = ?", ID_USUARIO)
+                consultarValor(
+                        "SELECT estado FROM dbo.Usuario WHERE id_usuario = ?",
+                        ID_USUARIO
+                )
         );
+
+        // Identificador exclusivo para esta ejecucion.
+        descripcionPrueba = "IT-SIGELAB-" +
+                UUID.randomUUID()
+                        .toString()
+                        .replace("-", "")
+                        .substring(0, 12);
 
         MantenimientoService service = new MantenimientoService();
 
+        // Registrar el ingreso del equipo al taller.
         Mantenimiento orden = service.ingresarATaller(
                 ID_EQUIPO,
                 TipoMantenimiento.PREVENTIVO,
                 ID_USUARIO,
-                "Prueba de integración SQL Server",
-                "Registro automático de prueba"
+                descripcionPrueba,
+                "Registro automatico de prueba"
         );
 
         assertNotNull(orden);
-        assertTrue(orden.getIdMantenimiento() > 0);
-        int idMantenimiento = orden.getIdMantenimiento();
 
+        // Guardar el ID inmediatamente para la limpieza.
+        idMantenimientoCreado = orden.getIdMantenimiento();
+
+        assertTrue(idMantenimientoCreado > 0);
+
+        // Comprobar el estado y la auditoria de ingreso.
         assertEquals(
                 "MANTENIMIENTO",
-                consultarValor("SELECT estado FROM dbo.Equipo WHERE id_equipo = ?", ID_EQUIPO)
+                consultarValor(
+                        "SELECT estado FROM dbo.Equipo WHERE id_equipo = ?",
+                        ID_EQUIPO
+                )
         );
-        assertTrue(existeAuditoria(idMantenimiento, "MANTENIMIENTO_INICIO"));
 
+        assertTrue(
+                existeAuditoria(
+                        idMantenimientoCreado,
+                        "MANTENIMIENTO_INICIO"
+                )
+        );
+
+        // Finalizar el mantenimiento.
         service.finalizarMantenimiento(
-                idMantenimiento,
+                idMantenimientoCreado,
                 ResultadoMantenimiento.REPARADO,
                 "Equipo reparado correctamente",
                 ID_USUARIO
         );
 
+        // Comprobar el estado final.
         assertEquals(
                 "DISPONIBLE",
-                consultarValor("SELECT estado FROM dbo.Equipo WHERE id_equipo = ?", ID_EQUIPO)
+                consultarValor(
+                        "SELECT estado FROM dbo.Equipo WHERE id_equipo = ?",
+                        ID_EQUIPO
+                )
         );
+
         assertEquals(
                 "CERRADO",
                 consultarValor(
                         "SELECT estado FROM dbo.Mantenimiento WHERE id_mantenimiento = ?",
-                        idMantenimiento
+                        idMantenimientoCreado
                 )
         );
+
         assertEquals(
                 "REPARADO",
                 consultarValor(
                         "SELECT resultado FROM dbo.Mantenimiento WHERE id_mantenimiento = ?",
-                        idMantenimiento
+                        idMantenimientoCreado
                 )
         );
-        assertTrue(existeAuditoria(idMantenimiento, "MANTENIMIENTO_REPARADO"));
+
+        assertTrue(
+                existeAuditoria(
+                        idMantenimientoCreado,
+                        "MANTENIMIENTO_REPARADO"
+                )
+        );
     }
 
     private String consultarValor(String sql, int id) throws SQLException {
         try (Connection conn = DatabaseConfig.getConnection();
              PreparedStatement ps = conn.prepareStatement(sql)) {
+
             ps.setInt(1, id);
+
             try (ResultSet rs = ps.executeQuery()) {
-                assertTrue(rs.next(), "No se encontró el registro esperado");
+                assertTrue(rs.next(), "No se encontro el registro esperado");
                 return rs.getString(1);
             }
         }
     }
 
-    private boolean existeAuditoria(int idMantenimiento, String accion) throws SQLException {
+    private boolean existeAuditoria(int idMantenimiento, String accion)
+            throws SQLException {
+
         String sql = """
                 SELECT COUNT(*)
                 FROM dbo.Auditoria
@@ -124,6 +186,7 @@ class MantenimientoSqlIT {
 
         try (Connection conn = DatabaseConfig.getConnection();
              PreparedStatement ps = conn.prepareStatement(sql)) {
+
             ps.setInt(1, idMantenimiento);
             ps.setString(2, accion);
 
