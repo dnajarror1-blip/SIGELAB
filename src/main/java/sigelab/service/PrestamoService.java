@@ -1,6 +1,15 @@
 package sigelab.service;
-
 import java.sql.SQLException;
+
+import java.sql.Connection;
+import java.util.ArrayList;
+import java.util.Collections;
+import sigelab.config.DatabaseConfig;
+import sigelab.enums.EstadoPrestamo;
+import sigelab.model.DetallePrestamo;
+import sigelab.repository.PrestamoRepository;
+import sigelab.repository.DetallePrestamoRepository;
+
 
 import sigelab.enums.EstadoEquipo;
 import sigelab.exception.BusinessException;
@@ -15,6 +24,14 @@ import sigelab.model.Prestamo;
 public class PrestamoService {
 
     private final EquipoRepository equipoRepository;
+
+    private final PrestamoRepository prestamoRepository =
+            new PrestamoRepository();
+
+    private final DetallePrestamoRepository detallePrestamoRepository =
+            new DetallePrestamoRepository();
+
+    private final AuditService auditService = new AuditService();
 
     public PrestamoService() {
         this(new EquipoRepository());
@@ -50,9 +67,110 @@ public class PrestamoService {
             );
         }
     }
+
+    public int crearPrestamo(Prestamo prestamo, List<Integer> idsEquipo) {
+        validarDatosPrestamo(prestamo, idsEquipo);
+
+        // Trabajamos con una copia y un orden consistente de equipos.
+        List<Integer> equiposOrdenados = new ArrayList<>(idsEquipo);
+        Collections.sort(equiposOrdenados);
+
+        // El estado inicial lo establece el servicio.
+        Prestamo nuevo = new Prestamo(
+                prestamo.getIdUsuarioSolicitante(),
+                prestamo.getIdUsuarioRegistra(),
+                prestamo.getFechaPrestamo(),
+                prestamo.getFechaEsperadaDevolucion(),
+                EstadoPrestamo.ACTIVO,
+                prestamo.getObservaciones()
+        );
+
+        int idPrestamo;
+
+        try (Connection conn = DatabaseConfig.getConnection()) {
+            conn.setTransactionIsolation(Connection.TRANSACTION_SERIALIZABLE);
+            conn.setAutoCommit(false);
+
+            try {
+                // Revalidamos dentro de la transacción.
+                for (Integer idEquipo : equiposOrdenados) {
+                    Equipo equipo = equipoRepository
+                            .buscarPorId(idEquipo, conn)
+                            .orElseThrow(() -> new BusinessException(
+                                    "No existe el equipo con ID " + idEquipo + "."
+                            ));
+
+                    if (equipo.getEstado() != EstadoEquipo.DISPONIBLE) {
+                        throw new BusinessException(
+                                "El equipo con ID " + idEquipo
+                                        + " no está disponible. Estado: "
+                                        + equipo.getEstado()
+                        );
+                    }
+                }
+
+                idPrestamo = prestamoRepository.guardar(conn, nuevo);
+
+                for (Integer idEquipo : equiposOrdenados) {
+                    DetallePrestamo detalle =
+                            new DetallePrestamo(idPrestamo, idEquipo);
+
+                    detallePrestamoRepository.guardar(conn, detalle);
+
+                    equipoRepository.actualizarEstado(
+                            idEquipo,
+                            EstadoEquipo.PRESTADO,
+                            conn
+                    );
+                }
+
+                auditService.registrar(
+                        nuevo.getIdUsuarioRegistra(),
+                        "PRESTAMO_CREADO",
+                        "Prestamo",
+                        idPrestamo,
+                        "Préstamo registrado con "
+                                + equiposOrdenados.size() + " equipo(s).",
+                        conn
+                );
+
+                conn.commit();
+
+            } catch (SQLException | RuntimeException e) {
+                try {
+                    conn.rollback();
+                } catch (SQLException rollbackError) {
+                    e.addSuppressed(rollbackError);
+                }
+
+                if (e instanceof BusinessException businessError) {
+                    throw businessError;
+                }
+
+                throw new DataAccessException(
+                        "No se pudo completar el préstamo. "
+                                + "Compruebe su estado antes de volver a intentarlo.",
+                        e
+                );
+            }
+
+        } catch (SQLException e) {
+            throw new DataAccessException(
+                    "Ocurrió un error de conexión al procesar el préstamo.",
+                    e
+            );
+        }
+
+        // Actualizamos el objeto recibido después de confirmar y cerrar.
+        prestamo.setIdPrestamo(idPrestamo);
+        prestamo.setEstado(EstadoPrestamo.ACTIVO);
+
+        return idPrestamo;
+    }
     private void validarDatosPrestamo(
             Prestamo prestamo,
             List<Integer> idsEquipo
+
     ) {
         if (prestamo == null) {
             throw new BusinessException(
