@@ -15,7 +15,6 @@ public class LoginForm extends JFrame {
     private static final Color TEXTO = new Color(17, 24, 39);          // casi negro
     private static final Color TEXTO_SUAVE = new Color(107, 114, 128); // gris
     private static final Color ERROR = new Color(220, 38, 38);         // rojo
-    private static final Color OK = new Color(22, 163, 74);            // verde
 
     // La pantalla solo habla con el controller, nunca con la base de datos
     private final LoginController controller = new LoginController();
@@ -126,14 +125,16 @@ public class LoginForm extends JFrame {
         var resultado = controller.iniciarSesion(username, password);
 
         if (resultado.exito()) {
-            lblMensaje.setForeground(OK);
-            lblMensaje.setText(resultado.mensaje());
-            // TEMPORAL: aquí después se abre el menú principal
-            System.out.println("Menú del usuario: " + resultado.menu());
-        } else {
-            lblMensaje.setForeground(ERROR);
-            lblMensaje.setText(resultado.mensaje());
+            // Entró bien: abrimos la ventana principal con el menú de su rol
+            // y cerramos el login
+            new MenuPrincipalForm(resultado.usuario(), resultado.menu()).setVisible(true);
+            dispose();
+            return;
         }
+
+        // Si llegamos aquí es porque falló: mostramos el motivo en rojo
+        lblMensaje.setForeground(ERROR);
+        lblMensaje.setText(resultado.mensaje());
 
         // Por seguridad, borramos la contraseña del campo
         txtPassword.setText("");
