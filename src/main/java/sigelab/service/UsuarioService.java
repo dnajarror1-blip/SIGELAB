@@ -6,6 +6,7 @@ import sigelab.exception.BusinessException;
 import sigelab.model.Usuario;
 import sigelab.repository.UsuarioRepository;
 
+import java.util.List;
 import java.util.Optional;
 
 public class UsuarioService {
@@ -74,7 +75,28 @@ public class UsuarioService {
             throw new BusinessException("El usuario no está activo");
         }
 
-
+        // Todo bien, lo dejamos pasar
         return u;
+    }
+
+    // Devuelve todos los usuarios para mostrarlos en la tabla
+    public List<Usuario> listarUsuarios() {
+        return usuarioRepository.listarTodos();
+    }
+
+    // Activa o desactiva a un usuario.
+    // idQuienLoHace es el usuario que tiene la sesión abierta
+    public void cambiarEstado(int idUsuario, EstadoUsuario nuevoEstado, int idQuienLoHace) {
+
+        // Regla: nadie puede desactivarse a sí mismo, porque se quedaría sin acceso
+        if (idUsuario == idQuienLoHace && nuevoEstado == EstadoUsuario.INACTIVO) {
+            throw new BusinessException("No puedes desactivar tu propio usuario");
+        }
+
+        // Si el repositorio no encontró ese id, avisamos
+        boolean cambiado = usuarioRepository.cambiarEstado(idUsuario, nuevoEstado);
+        if (!cambiado) {
+            throw new BusinessException("No se encontró el usuario");
+        }
     }
 }

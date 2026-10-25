@@ -10,6 +10,8 @@ import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Optional;
 
 public class UsuarioRepository {
@@ -18,9 +20,16 @@ public class UsuarioRepository {
             "SELECT id_usuario, nombre, apellido, username, password_hash, "
                     + "correo, id_rol, estado FROM dbo.Usuario WHERE username = ?";
 
+    private static final String SQL_LISTAR_TODOS =
+            "SELECT id_usuario, nombre, apellido, username, password_hash, "
+                    + "correo, id_rol, estado FROM dbo.Usuario ORDER BY id_usuario";
+
     private static final String SQL_INSERTAR =
             "INSERT INTO dbo.Usuario (nombre, apellido, username, password_hash, "
                     + "correo, id_rol, estado) VALUES (?, ?, ?, ?, ?, ?, ?)";
+
+    private static final String SQL_CAMBIAR_ESTADO =
+            "UPDATE dbo.Usuario SET estado = ? WHERE id_usuario = ?";
 
     // Busca un usuario por su username; si no existe devuelve vacío
     public Optional<Usuario> buscarPorUsername(String username) {
@@ -40,6 +49,24 @@ public class UsuarioRepository {
             // Convertimos el error de SQL en la excepción del equipo
             // y guardamos el error original (e) para poder investigarlo
             throw new DataAccessException("No se pudo buscar el usuario", e);
+        }
+    }
+
+    // Trae todos los usuarios, del más viejo al más nuevo
+    public List<Usuario> listarTodos() {
+        try (Connection con = DatabaseConfig.getConnection();
+             PreparedStatement ps = con.prepareStatement(SQL_LISTAR_TODOS);
+             ResultSet rs = ps.executeQuery()) {
+
+            // Vamos metiendo cada fila en una lista
+            List<Usuario> usuarios = new ArrayList<>();
+            while (rs.next()) {
+                usuarios.add(mapear(rs));
+            }
+            return usuarios;
+
+        } catch (SQLException e) {
+            throw new DataAccessException("No se pudo listar los usuarios", e);
         }
     }
 
@@ -69,6 +96,23 @@ public class UsuarioRepository {
 
         } catch (SQLException e) {
             throw new DataAccessException("No se pudo guardar el usuario", e);
+        }
+    }
+
+    // Cambia un usuario a ACTIVO o INACTIVO.
+    // Devuelve true si encontró al usuario y lo cambió
+    public boolean cambiarEstado(int idUsuario, EstadoUsuario nuevoEstado) {
+        try (Connection con = DatabaseConfig.getConnection();
+             PreparedStatement ps = con.prepareStatement(SQL_CAMBIAR_ESTADO)) {
+
+            ps.setString(1, nuevoEstado.name());
+            ps.setInt(2, idUsuario);
+
+            // executeUpdate nos dice a cuántas filas afectó
+            return ps.executeUpdate() > 0;
+
+        } catch (SQLException e) {
+            throw new DataAccessException("No se pudo cambiar el estado del usuario", e);
         }
     }
 
