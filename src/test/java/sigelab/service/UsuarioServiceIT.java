@@ -2,6 +2,7 @@ package sigelab.service;
 
 import org.junit.jupiter.api.Test;
 import org.mindrot.jbcrypt.BCrypt;
+import sigelab.exception.BusinessException;
 import sigelab.model.Usuario;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -11,7 +12,7 @@ class UsuarioServiceIT {
     private final UsuarioService service = new UsuarioService();
 
     @Test
-    void guardaLaContrasenaCifrada() throws Exception {
+    void guardaLaContrasenaCifrada() {
         // Username con la hora para que nunca se repita entre corridas
         String username = "test_service_" + System.currentTimeMillis();
 
@@ -24,23 +25,24 @@ class UsuarioServiceIT {
     }
 
     @Test
-    void noPermiteUsernameRepetido() throws Exception {
+    void noPermiteUsernameRepetido() {
         String username = "test_repetido_" + System.currentTimeMillis();
         service.crearUsuario("Ana", "Prueba", username, "clave123", "a@correo.test", 1);
 
         // El segundo intento con el mismo username tiene que fallar
-        assertThrows(IllegalArgumentException.class, () ->
+        assertThrows(BusinessException.class, () ->
                 service.crearUsuario("Otro", "Prueba", username, "clave123", "b@correo.test", 1));
     }
 
     @Test
     void rechazaContrasenaCorta() {
         // Con solo 3 caracteres no debe dejar crear el usuario
-        assertThrows(IllegalArgumentException.class, () ->
+        assertThrows(BusinessException.class, () ->
                 service.crearUsuario("Ana", "Prueba", "x_corta", "123", "c@correo.test", 1));
     }
+
     @Test
-    void loginCorrectoDevuelveElUsuario() throws Exception {
+    void loginCorrectoDevuelveElUsuario() {
         // Creamos un usuario para poder entrar con él
         String username = "test_login_" + System.currentTimeMillis();
         service.crearUsuario("Luis", "Prueba", username, "clave123", "luis@correo.test", 1);
@@ -52,19 +54,19 @@ class UsuarioServiceIT {
     }
 
     @Test
-    void loginConContrasenaIncorrectaFalla() throws Exception {
+    void loginConContrasenaIncorrectaFalla() {
         String username = "test_mala_" + System.currentTimeMillis();
         service.crearUsuario("Luis", "Prueba", username, "clave123", "luis2@correo.test", 1);
 
         // Contraseña equivocada: tiene que lanzar error
-        assertThrows(IllegalArgumentException.class, () ->
+        assertThrows(BusinessException.class, () ->
                 service.autenticar(username, "otra_clave"));
     }
 
     @Test
     void loginConUsuarioInexistenteFalla() {
         // Este username no existe en la base
-        assertThrows(IllegalArgumentException.class, () ->
+        assertThrows(BusinessException.class, () ->
                 service.autenticar("no_existe_xyz_123", "clave123"));
     }
 }

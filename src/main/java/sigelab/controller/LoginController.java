@@ -1,11 +1,12 @@
 package sigelab.controller;
 
+import sigelab.exception.BusinessException;
+import sigelab.exception.DataAccessException;
 import sigelab.model.Usuario;
 import sigelab.service.Modulo;
 import sigelab.service.PermisoService;
 import sigelab.service.UsuarioService;
 
-import java.sql.SQLException;
 import java.util.Set;
 
 public class LoginController {
@@ -29,11 +30,11 @@ public class LoginController {
 
             return new ResultadoLogin(true, "Bienvenido " + u.getNombre(), u, menu);
 
-        } catch (IllegalArgumentException e) {
+        } catch (BusinessException e) {
             // Error de reglas (contraseña mala, usuario inactivo...): se lo mostramos tal cual
             return new ResultadoLogin(false, e.getMessage(), null, Set.of());
 
-        } catch (SQLException e) {
+        } catch (DataAccessException e) {
             // Error de base de datos: al usuario no le mostramos detalles técnicos
             return new ResultadoLogin(false, "No se pudo conectar con la base de datos", null, Set.of());
         }
