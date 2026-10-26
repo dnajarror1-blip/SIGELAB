@@ -167,6 +167,11 @@ Antes de desarrollar módulos, consultar:
 - `docs/RESPONSABILIDADES.md`
 - `docs/DECISIONES.md`
 
+Documentación de la base de datos:
+
+- [Modelo entidad-relación](docs/MODELO_ER.md)
+- [Diccionario de datos](docs/DICCIONARIO_DATOS.md)
+
 ## 12. Distribución del equipo
 
 | Integrante | Responsabilidad |
