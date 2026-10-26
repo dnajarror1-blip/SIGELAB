@@ -18,11 +18,14 @@ public class MenuPrincipalForm extends JFrame {
     private static final Color TEXTO_SUAVE = new Color(107, 114, 128);
     private static final Color TEXTO_CLARO = new Color(209, 213, 219); // gris claro para la barra
 
-    // Estos dos textos cambian cuando se hace clic en una opción
-    private final JLabel lblTitulo = new JLabel();
-    private final JLabel lblDetalle = new JLabel();
+    // El usuario que tiene la sesión abierta
+    private final Usuario usuario;
+
+    // El área de la derecha: aquí se cambia lo que se muestra según el botón
+    private final JPanel contenido = new JPanel(new BorderLayout());
 
     public MenuPrincipalForm(Usuario usuario, Set<Modulo> menu) {
+        this.usuario = usuario;
         setTitle("SIGELAB");
         setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
 
@@ -56,10 +59,7 @@ public class MenuPrincipalForm extends JFrame {
         // Un botón por cada opción que le toca a este rol
         for (Modulo m : menu) {
             JButton boton = crearBotonLateral(nombreVisible(m));
-            boton.addActionListener(e -> {
-                lblTitulo.setText(nombreVisible(m));
-                lblDetalle.setText("Esta sección todavía no está conectada.");
-            });
+            boton.addActionListener(e -> mostrar(m));
             lateral.add(boton);
             lateral.add(Box.createVerticalStrut(6));
         }
@@ -72,37 +72,67 @@ public class MenuPrincipalForm extends JFrame {
         lateral.add(btnSalir);
 
         // ---------- Área de contenido (derecha) ----------
-        lblTitulo.setText("Hola, " + usuario.getNombre());
-        lblTitulo.setFont(lblTitulo.getFont().deriveFont(Font.BOLD, 28f));
-        lblTitulo.setForeground(TEXTO);
-
-        lblDetalle.setText("Elige una opción del menú de la izquierda.");
-        lblDetalle.setFont(lblDetalle.getFont().deriveFont(15f));
-        lblDetalle.setForeground(TEXTO_SUAVE);
-
-        JPanel cabecera = new JPanel();
-        cabecera.setLayout(new BoxLayout(cabecera, BoxLayout.Y_AXIS));
-        cabecera.setOpaque(false);
-        lblTitulo.setAlignmentX(Component.LEFT_ALIGNMENT);
-        lblDetalle.setAlignmentX(Component.LEFT_ALIGNMENT);
-        cabecera.add(lblTitulo);
-        cabecera.add(Box.createVerticalStrut(8));
-        cabecera.add(lblDetalle);
-
-        JPanel contenido = new JPanel(new BorderLayout());
         contenido.setBackground(Color.WHITE);
         contenido.setBorder(BorderFactory.createEmptyBorder(40, 45, 40, 45));
-        contenido.add(cabecera, BorderLayout.NORTH);
+
+        // Al abrir, mostramos un saludo
+        cambiarContenido(crearTexto("Hola, " + usuario.getNombre(),
+                "Elige una opción del menú de la izquierda."));
 
         // ---------- Armamos la ventana ----------
         setLayout(new BorderLayout());
         add(lateral, BorderLayout.WEST);
         add(contenido, BorderLayout.CENTER);
 
-        setMinimumSize(new Dimension(900, 600));
-        setSize(1000, 650);
+        setMinimumSize(new Dimension(1000, 650));
+        setSize(1100, 700);
         setLocationRelativeTo(null);
         setExtendedState(JFrame.MAXIMIZED_BOTH); // se abre ocupando toda la pantalla
+    }
+
+    // Decide qué se muestra a la derecha según el botón que se presionó
+    private void mostrar(Modulo m) {
+        if (m == Modulo.USUARIOS) {
+            cambiarContenido(new UsuariosPanel(usuario));
+        } else {
+            // Las demás secciones las hacen otros integrantes; por ahora un aviso
+            cambiarContenido(crearTexto(nombreVisible(m),
+                    "Esta sección todavía no está conectada."));
+        }
+    }
+
+    // Quita lo que había a la derecha y pone lo nuevo
+    private void cambiarContenido(JComponent nuevo) {
+        contenido.removeAll();
+        contenido.add(nuevo, BorderLayout.CENTER);
+        contenido.revalidate();
+        contenido.repaint();
+    }
+
+    // Un título grande con una línea de texto gris debajo
+    private JComponent crearTexto(String titulo, String detalle) {
+        JLabel lblTitulo = new JLabel(titulo);
+        lblTitulo.setFont(lblTitulo.getFont().deriveFont(Font.BOLD, 28f));
+        lblTitulo.setForeground(TEXTO);
+        lblTitulo.setAlignmentX(Component.LEFT_ALIGNMENT);
+
+        JLabel lblDetalle = new JLabel(detalle);
+        lblDetalle.setFont(lblDetalle.getFont().deriveFont(15f));
+        lblDetalle.setForeground(TEXTO_SUAVE);
+        lblDetalle.setAlignmentX(Component.LEFT_ALIGNMENT);
+
+        JPanel columna = new JPanel();
+        columna.setLayout(new BoxLayout(columna, BoxLayout.Y_AXIS));
+        columna.setOpaque(false);
+        columna.add(lblTitulo);
+        columna.add(Box.createVerticalStrut(8));
+        columna.add(lblDetalle);
+
+        // Lo pegamos arriba para que no quede estirado
+        JPanel envoltura = new JPanel(new BorderLayout());
+        envoltura.setOpaque(false);
+        envoltura.add(columna, BorderLayout.NORTH);
+        return envoltura;
     }
 
     // Crea un botón plano para la barra lateral, con un fondo suave al pasar el mouse

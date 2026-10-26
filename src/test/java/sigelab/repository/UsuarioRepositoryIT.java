@@ -12,34 +12,45 @@ class UsuarioRepositoryIT {
 
     private final UsuarioRepository repo = new UsuarioRepository();
 
-    @Test
-    void encuentraUsuarioExistente() throws Exception {
-        Optional<Usuario> r = repo.buscarPorUsername("prueba_repo");
-        assertTrue(r.isPresent());
-        assertEquals(EstadoUsuario.ACTIVO, r.get().getEstado());
+    // Arma un usuario de prueba con un username que nunca se repite
+    private Usuario nuevoDePrueba(String prefijo) {
+        Usuario u = new Usuario();
+        u.setNombre("Prueba");
+        u.setApellido("Repo");
+        u.setUsername(prefijo + System.currentTimeMillis());
+        u.setPasswordHash("hash_de_prueba");
+        u.setCorreo("repo@correo.test");
+        u.setIdRol(1);
+        u.setEstado(EstadoUsuario.ACTIVO);
+        return u;
     }
 
     @Test
-    void usuarioInexistenteDevuelveVacio() throws Exception {
-        assertTrue(repo.buscarPorUsername("no_existe_xyz").isEmpty());
+    void encuentraUsuarioExistente() {
+        // Primero creamos el usuario, así el test no depende de nada puesto a mano
+        Usuario guardado = repo.guardar(nuevoDePrueba("test_repo_busca_"));
+
+        Optional<Usuario> encontrado = repo.buscarPorUsername(guardado.getUsername());
+
+        assertTrue(encontrado.isPresent());
+        assertEquals(EstadoUsuario.ACTIVO, encontrado.get().getEstado());
     }
 
     @Test
-    void guardaUsuarioYAsignaId() throws Exception {
-        UsuarioRepository repo = new UsuarioRepository();
+    void usuarioInexistenteDevuelveVacio() {
+        // Este username no existe en la base
+        Optional<Usuario> encontrado = repo.buscarPorUsername("no_existe_xyz");
 
-        Usuario nuevo = new Usuario();
-        nuevo.setNombre("Nuevo");
-        nuevo.setApellido("Guardado");
-        nuevo.setUsername("test_guardar_" + System.currentTimeMillis());
-        nuevo.setPasswordHash("hash_de_prueba");
-        nuevo.setCorreo("guardar@correo.test");
-        nuevo.setIdRol(1);
-        nuevo.setEstado(EstadoUsuario.ACTIVO);
+        assertTrue(encontrado.isEmpty());
+    }
 
-        Usuario guardado = repo.guardar(nuevo);
+    @Test
+    void guardaUsuarioYAsignaId() {
+        Usuario guardado = repo.guardar(nuevoDePrueba("test_repo_guarda_"));
 
+        // La base le puso un id
         assertNotNull(guardado.getIdUsuario());
-        assertTrue(repo.buscarPorUsername(nuevo.getUsername()).isPresent());
+        // Y ahora sí se puede encontrar
+        assertTrue(repo.buscarPorUsername(guardado.getUsername()).isPresent());
     }
 }
