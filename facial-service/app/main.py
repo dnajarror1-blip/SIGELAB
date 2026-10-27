@@ -454,6 +454,16 @@ def verificar_rostro_api(
         # 7. Registrar auditoria
         # ------------------------------------------
 
+        registrar_auditoria_verificacion(
+            id_usuario,
+            resultado_pipeline,
+        )
+
+        # ------------------------------------------
+        # 8. Preparar respuesta
+        # ------------------------------------------
+
+        # Captura no concluyente.
         if (
             resultado_pipeline["livenessStatus"]
             == "input_rejected"
@@ -463,6 +473,7 @@ def verificar_rostro_api(
                 "Intente otra vez."
             )
 
+        # La captura no supero la prueba de presencia real.
         elif (
             resultado_pipeline["livenessPassed"]
             is False
@@ -472,6 +483,7 @@ def verificar_rostro_api(
                 "de presencia real."
             )
 
+        # Analisis completado.
         else:
             mensaje = (
                 "Presencia real evaluada y comparacion "
