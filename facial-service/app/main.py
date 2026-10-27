@@ -6,7 +6,6 @@ No autoriza el inicio de sesion.
 """
 
 import hmac
-import threading
 from typing import Annotated
 
 from dotenv import dotenv_values
@@ -21,10 +20,10 @@ from .facial_pipeline import (
 )
 from .facial_repository import consultar_estado_facial
 from .perfil_storage import obtener_embedding_facial, validar_embedding
+from .camara_control import BLOQUEO_CAMARA
 
 
 BASE_PRUEBAS = "SIGELAB_TEST_FACE"
-BLOQUEO_CAMARA = threading.Lock()
 
 
 app = FastAPI(
