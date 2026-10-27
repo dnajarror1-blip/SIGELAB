@@ -413,16 +413,45 @@ def verificar_rostro_api(
         )
 
         # ------------------------------------------
-        # 6. Registrar auditoria
+        # 6. Revalidar estado despues de la captura
         # ------------------------------------------
 
-        registrar_auditoria_verificacion(
-            id_usuario,
-            resultado_pipeline,
+        estado_final = consultar_estado_facial(
+            id_usuario
         )
 
+        # El usuario pudo haber sido eliminado.
+        if not estado_final["usuario_existe"]:
+            raise HTTPException(
+                status_code=404,
+                detail=(
+                    "El usuario ya no existe "
+                    "al finalizar la verificacion"
+                ),
+            )
+
+        # El administrador pudo haberlo desactivado.
+        if not estado_final["usuario_activo"]:
+            raise HTTPException(
+                status_code=403,
+                detail=(
+                    "La cuenta fue desactivada "
+                    "durante la verificacion facial"
+                ),
+            )
+
+        # El perfil facial pudo haber sido desactivado.
+        if not estado_final["perfil_activo"]:
+            raise HTTPException(
+                status_code=409,
+                detail=(
+                    "El perfil facial dejo de estar activo "
+                    "durante la verificacion"
+                ),
+            )
+
         # ------------------------------------------
-        # 7. Preparar respuesta
+        # 7. Registrar auditoria
         # ------------------------------------------
 
         if (
