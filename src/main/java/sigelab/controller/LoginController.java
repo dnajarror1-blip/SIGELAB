@@ -3,15 +3,17 @@ package sigelab.controller;
 import sigelab.exception.BusinessException;
 import sigelab.exception.DataAccessException;
 import sigelab.model.Usuario;
+import sigelab.service.LoginService;
 import sigelab.service.Modulo;
 import sigelab.service.PermisoService;
-import sigelab.service.UsuarioService;
 
 import java.util.Set;
 
 public class LoginController {
 
-    private final UsuarioService usuarioService = new UsuarioService();
+    // Antes hablaba con UsuarioService; ahora con LoginService,
+    // que además deja constancia de cada intento en la auditoría
+    private final LoginService loginService = new LoginService();
     private final PermisoService permisoService = new PermisoService();
 
     // Aquí guardamos lo que la pantalla necesita saber después de intentar entrar.
@@ -22,8 +24,8 @@ public class LoginController {
     // La pantalla llama a este método cuando el usuario presiona "Entrar"
     public ResultadoLogin iniciarSesion(String username, String password) {
         try {
-            // Revisamos usuario, contraseña y que esté activo
-            Usuario u = usuarioService.autenticar(username, password);
+            // Revisa usuario y contraseña, y registra el intento en auditoría
+            Usuario u = loginService.iniciarSesion(username, password);
 
             // Según su rol, sacamos las opciones del menú que le tocan
             Set<Modulo> menu = permisoService.modulosDe(u.getIdRol());

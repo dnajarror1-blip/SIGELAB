@@ -75,7 +75,7 @@ public class UsuarioService {
             throw new BusinessException("El usuario no está activo");
         }
 
-        // Todo bien, lo dejamos pasar
+
         return u;
     }
 
@@ -98,5 +98,10 @@ public class UsuarioService {
         if (!cambiado) {
             throw new BusinessException("No se encontró el usuario");
         }
+    }
+
+    // Busca un usuario por su username (lo usa el login para saber su id al auditar)
+    public Optional<Usuario> buscarPorUsername(String username) {
+        return usuarioRepository.buscarPorUsername(username);
     }
 }
