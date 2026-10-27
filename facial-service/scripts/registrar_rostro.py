@@ -7,11 +7,8 @@ from insightface.app import FaceAnalysis
 from app.database import get_connection
 from app.facial_matching import calcular_similitud
 from app.facial_repository import consultar_estado_facial
-from app.perfil_storage import (
-    guardar_perfil_facial,
-    validar_embedding,
-)
-
+from app.perfil_storage import validar_embedding
+from app.registro_facial_nuevo import guardar_perfil_nuevo
 
 BASE_PRUEBAS = "SIGELAB_TEST_FACE"
 USERNAME = "faceid.integrante08"
@@ -379,11 +376,25 @@ def guardar_perfil(
     muestras,
     calidades,
 ):
+    """
+    Registra un perfil facial nuevo.
+
+    Comprueba la base de pruebas, la identidad
+    del usuario y su estado.
+
+    Utiliza guardar_perfil_nuevo para impedir
+    sobrescrituras y proteger la transaccion.
+    """
+
     conexion = get_connection()
 
     try:
+        # 1. Exigir una transaccion controlada.
+        conexion.autocommit = False
+
         cursor = conexion.cursor()
 
+        # 2. Verificar la base autorizada.
         base = cursor.execute(
             "SELECT DB_NAME()"
         ).fetchone()[0]
@@ -394,6 +405,8 @@ def guardar_perfil(
                 "base de datos incorrecta"
             )
 
+        # 3. Confirmar que el ID corresponde
+        # al usuario configurado.
         usuario = cursor.execute(
             """
             SELECT estado
@@ -410,9 +423,11 @@ def guardar_perfil(
             or str(usuario[0]).strip().upper() != "ACTIVO"
         ):
             raise RuntimeError(
-                "El usuario ya no esta activo"
+                "El usuario ya no esta activo "
+                "o no corresponde al registro solicitado"
             )
 
+        # 4. Comprobar previamente si tiene perfil.
         existente = cursor.execute(
             """
             SELECT 1
@@ -428,17 +443,30 @@ def guardar_perfil(
                 "No se sobrescribira."
             )
 
-        guardar_perfil_facial(
+        # 5. Calcular calidad de las muestras.
+        calidad_promedio = round(
+            float(np.mean(calidades)),
+            4,
+        )
+
+        # 6. Realizar el registro protegido.
+        #
+        # Esta funcion vuelve a comprobar:
+        # - Base autorizada.
+        # - Usuario existente y activo.
+        # - Ausencia de perfil previo.
+        #
+        # Ademas utiliza bloqueos SQL para
+        # proteger el registro concurrente.
+        guardar_perfil_nuevo(
             id_usuario=id_usuario,
             embedding=datos,
             cantidad_muestras=len(muestras),
-            calidad=round(
-                float(np.mean(calidades)),
-                4,
-            ),
+            calidad=calidad_promedio,
             conexion=conexion,
         )
 
+        # 7. Confirmar perfil y auditoria juntos.
         conexion.commit()
 
     except Exception:
