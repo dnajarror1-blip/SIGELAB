@@ -1,20 +1,19 @@
 """
-SIGELAB - Cambio de estado durante FaceID.
+SIGELAB - Auditoria por cambio de estado durante FaceID.
 
-Comprueba que la verificacion facial se rechaza
-cuando un usuario es desactivado durante
-el procesamiento de su rostro.
+Comprueba que una verificacion facial sea rechazada
+si el administrador desactiva la cuenta o el perfil
+durante el procesamiento.
 
-Todas las operaciones externas son simuladas.
+Las dependencias externas estan simuladas.
 
-No abre la camara.
+No utiliza camara real.
 No consulta SQL Server.
 No modifica perfiles.
 No registra auditorias reales.
 """
 
 import unittest
-
 from unittest.mock import patch
 
 from fastapi.testclient import TestClient
@@ -23,28 +22,26 @@ from app.main import (
     app,
     validar_clave_api,
     BLOQUEO_CAMARA,
+    registrar_rechazo_por_estado,
 )
 
 
 class TestCambioEstadoFacial(unittest.TestCase):
 
-    def test_usuario_desactivado_durante_verificacion(self):
+    def verificar_rechazo(
+        self,
+        estado_final,
+        codigo_esperado,
+        mensaje_esperado,
+        causa_esperada,
+    ):
 
-        # Estado antes de iniciar la captura.
         estado_inicial = {
             "usuario_existe": True,
             "usuario_activo": True,
             "perfil_activo": True,
         }
 
-        # Estado despues del analisis facial.
-        estado_final = {
-            "usuario_existe": True,
-            "usuario_activo": False,
-            "perfil_activo": True,
-        }
-
-        # Resultado artificial del reconocimiento.
         resultado_simulado = {
             "similarity": 0.85,
             "livenessPassed": True,
@@ -53,18 +50,24 @@ class TestCambioEstadoFacial(unittest.TestCase):
         }
 
         self.assertFalse(
-            BLOQUEO_CAMARA.locked(),
-            "El bloqueo de camara esta ocupado"
+            BLOQUEO_CAMARA.locked()
         )
 
-        # Sustituir autenticacion solamente en esta prueba.
-        app.dependency_overrides[validar_clave_api] = (
-            lambda: None
+        dependencia_anterior = (
+            app.dependency_overrides.get(
+                validar_clave_api
+            )
         )
+
+        app.dependency_overrides[
+            validar_clave_api
+        ] = lambda: None
 
         try:
             with (
-                patch("app.main.verificar_base_face"),
+                patch(
+                    "app.main.verificar_base_face"
+                ),
 
                 patch(
                     "app.main.consultar_estado_facial",
@@ -94,8 +97,12 @@ class TestCambioEstadoFacial(unittest.TestCase):
                 ) as analizar_rostro,
 
                 patch(
+                    "app.main.registrar_rechazo_por_estado"
+                ) as registrar_rechazo,
+
+                patch(
                     "app.main.registrar_auditoria_verificacion"
-                ) as registrar_auditoria,
+                ) as auditoria_completada,
 
                 patch(
                     "cv2.VideoCapture"
@@ -103,85 +110,149 @@ class TestCambioEstadoFacial(unittest.TestCase):
             ):
 
                 with TestClient(app) as cliente:
+
                     respuesta = cliente.post(
                         "/face/verify",
                         json={"userId": 1},
                     )
 
-                # La cuenta debe ser rechazada.
                 self.assertEqual(
                     respuesta.status_code,
-                    403
+                    codigo_esperado,
                 )
 
                 self.assertEqual(
                     respuesta.json()["detail"],
-                    (
-                        "La cuenta fue desactivada "
-                        "durante la verificacion facial"
-                    )
+                    mensaje_esperado,
                 )
 
-                # Deben haberse realizado dos consultas
-                # de estado: antes y despues del analisis.
                 self.assertEqual(
                     consultar_estado.call_count,
-                    2
+                    2,
                 )
 
-                # El flujo simulado debe llegar al analisis.
                 obtener_embedding.assert_called_once()
 
                 capturar_rostro.assert_called_once()
 
                 analizar_rostro.assert_called_once()
 
-                # Una verificacion rechazada no debe
-                # registrarse como verificacion completada.
-                registrar_auditoria.assert_not_called()
+                registrar_rechazo.assert_called_once_with(
+                    1,
+                    causa_esperada,
+                )
 
-                # No debe abrirse una camara real.
+                auditoria_completada.assert_not_called()
+
                 abrir_camara.assert_not_called()
 
-                print(
-                    "\nOK: Usuario inicialmente ACTIVO"
-                )
-
-                print(
-                    "OK: Captura y analisis simulados"
-                )
-
-                print(
-                    "OK: Usuario desactivado durante el proceso"
-                )
-
-                print(
-                    "OK: Verificacion rechazada con HTTP 403"
-                )
-
-                print(
-                    "OK: No se registro verificacion exitosa"
-                )
-
-                print(
-                    "OK: Camara real no utilizada"
-                )
-
         finally:
-            # Restaurar dependencia original.
-            app.dependency_overrides.pop(
-                validar_clave_api,
-                None
-            )
 
-        # Comprobar que el bloqueo se libero.
+            if dependencia_anterior is None:
+                app.dependency_overrides.pop(
+                    validar_clave_api,
+                    None,
+                )
+            else:
+                app.dependency_overrides[
+                    validar_clave_api
+                ] = dependencia_anterior
+
         self.assertFalse(
             BLOQUEO_CAMARA.locked(),
-            "El bloqueo de camara no fue liberado"
+            "La camara quedo bloqueada",
+        )
+
+    def test_usuario_desactivado_durante_verificacion(self):
+
+        estado_final = {
+            "usuario_existe": True,
+            "usuario_activo": False,
+            "perfil_activo": True,
+        }
+
+        self.verificar_rechazo(
+            estado_final=estado_final,
+            codigo_esperado=403,
+            mensaje_esperado=(
+                "La cuenta fue desactivada "
+                "durante la verificacion facial"
+            ),
+            causa_esperada="USUARIO_DESACTIVADO",
         )
 
         print(
-            "OK: Bloqueo de camara liberado"
+            "OK: Usuario desactivado rechazado y auditado"
+        )
+
+    def test_perfil_desactivado_durante_verificacion(self):
+
+        estado_final = {
+            "usuario_existe": True,
+            "usuario_activo": True,
+            "perfil_activo": False,
+        }
+
+        self.verificar_rechazo(
+            estado_final=estado_final,
+            codigo_esperado=409,
+            mensaje_esperado=(
+                "El perfil facial dejo de estar activo "
+                "durante la verificacion"
+            ),
+            causa_esperada="PERFIL_DESACTIVADO",
+        )
+
+        print(
+            "OK: Perfil desactivado rechazado y auditado"
+        )
+
+    def test_formato_auditoria_usuario(self):
+
+        with patch(
+            "app.main._guardar_auditoria"
+        ) as guardar:
+
+            registrar_rechazo_por_estado(
+                1,
+                "USUARIO_DESACTIVADO",
+            )
+
+            guardar.assert_called_once_with(
+                1,
+                resultado="RECHAZADO_ESTADO",
+                detalle=(
+                    "La cuenta fue desactivada "
+                    "durante la verificacion facial"
+                ),
+            )
+
+        print(
+            "OK: Formato de auditoria de usuario correcto"
+        )
+
+    def test_formato_auditoria_perfil(self):
+
+        with patch(
+            "app.main._guardar_auditoria"
+        ) as guardar:
+
+            registrar_rechazo_por_estado(
+                1,
+                "PERFIL_DESACTIVADO",
+            )
+
+            guardar.assert_called_once_with(
+                1,
+                resultado="RECHAZADO_ESTADO",
+                detalle=(
+                    "El perfil facial fue desactivado "
+                    "durante la verificacion"
+                ),
+            )
+
+        print(
+            "OK: Formato de auditoria de perfil correcto"
         )
 
 

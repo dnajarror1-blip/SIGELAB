@@ -293,6 +293,38 @@ def registrar_auditoria_incidencia(
         detalle=detalles_permitidos[resultado],
     )
 
+def registrar_rechazo_por_estado(
+    id_usuario,
+    causa,
+):
+    """
+    Registra verificaciones rechazadas cuando
+    cambia el estado del usuario o perfil facial.
+
+    No registra fotografias ni embeddings.
+    """
+
+    detalles_permitidos = {
+        "USUARIO_DESACTIVADO": (
+            "La cuenta fue desactivada "
+            "durante la verificacion facial"
+        ),
+        "PERFIL_DESACTIVADO": (
+            "El perfil facial fue desactivado "
+            "durante la verificacion"
+        ),
+    }
+
+    if causa not in detalles_permitidos:
+        raise ValueError(
+            "Causa de rechazo no permitida"
+        )
+
+    _guardar_auditoria(
+        id_usuario,
+        resultado="RECHAZADO_ESTADO",
+        detalle=detalles_permitidos[causa],
+    )
 
 @app.post(
     "/face/verify",
@@ -430,8 +462,14 @@ def verificar_rostro_api(
                 ),
             )
 
-        # El administrador pudo haberlo desactivado.
+                # El administrador pudo haberlo desactivado.
         if not estado_final["usuario_activo"]:
+
+            registrar_rechazo_por_estado(
+                id_usuario,
+                "USUARIO_DESACTIVADO",
+            )
+
             raise HTTPException(
                 status_code=403,
                 detail=(
@@ -442,6 +480,12 @@ def verificar_rostro_api(
 
         # El perfil facial pudo haber sido desactivado.
         if not estado_final["perfil_activo"]:
+
+            registrar_rechazo_por_estado(
+                id_usuario,
+                "PERFIL_DESACTIVADO",
+            )
+
             raise HTTPException(
                 status_code=409,
                 detail=(
