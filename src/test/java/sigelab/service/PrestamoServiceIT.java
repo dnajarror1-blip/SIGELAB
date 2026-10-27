@@ -168,4 +168,38 @@ class PrestamoServiceIT {
 
         assertNull(prestamo.getIdPrestamo());
     }
+    @Test
+    void encuentraPrestamoPorId() {
+        PrestamoService servicio = new PrestamoService();
+
+        Prestamo encontrado = servicio.buscarPorId(1)
+                .orElseThrow(() -> new AssertionError(
+                        "No se encontró el préstamo de prueba."
+                ));
+
+        assertEquals(1, encontrado.getIdPrestamo());
+        assertEquals(EstadoPrestamo.ACTIVO, encontrado.getEstado());
+        assertTrue(encontrado.getObservaciones().startsWith("Prueba P4 "));
+    }
+    @Test
+    void encuentraPrestamoDePruebaEntreLosActivos() {
+        List<Prestamo> activos = new PrestamoService().buscarActivos();
+
+        assertFalse(activos.isEmpty(), "La lista de préstamos activos está vacía.");
+
+        assertTrue(
+                activos.stream().anyMatch(
+                        prestamo -> Integer.valueOf(1).equals(prestamo.getIdPrestamo())
+                                && prestamo.getEstado() == EstadoPrestamo.ACTIVO
+                ),
+                "No se encontró el préstamo de prueba entre los activos."
+        );
+
+        assertTrue(
+                activos.stream().allMatch(
+                        prestamo -> prestamo.getEstado() == EstadoPrestamo.ACTIVO
+                ),
+                "La lista contiene un préstamo que no está activo."
+        );
+    }
 }

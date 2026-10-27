@@ -9,6 +9,11 @@ import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
+import java.util.Optional;
+import sigelab.config.DatabaseConfig;
+import sigelab.enums.EstadoPrestamo;
+import java.util.ArrayList;
+import java.util.List;
 
 public class PrestamoRepository {
 
@@ -59,6 +64,111 @@ public class PrestamoRepository {
         } catch (SQLException e) {
             throw new DataAccessException(
                     "Error al guardar el préstamo.", e
+            );
+        }
+    }
+    public Optional<Prestamo> buscarPorId(int idPrestamo) {
+        String sql = """
+            SELECT id_prestamo,
+                   id_usuario_solicitante,
+                   id_usuario_registra,
+                   fecha_prestamo,
+                   fecha_esperada_devolucion,
+                   estado,
+                   observaciones
+            FROM dbo.Prestamo
+            WHERE id_prestamo = ?
+            """;
+
+        try (Connection conn = DatabaseConfig.getConnection();
+             PreparedStatement stmt = conn.prepareStatement(sql)) {
+
+            stmt.setInt(1, idPrestamo);
+
+            try (ResultSet rs = stmt.executeQuery()) {
+                if (!rs.next()) {
+                    return Optional.empty();
+                }
+
+                Prestamo prestamo = new Prestamo();
+                prestamo.setIdPrestamo(rs.getInt("id_prestamo"));
+                prestamo.setIdUsuarioSolicitante(
+                        rs.getInt("id_usuario_solicitante")
+                );
+                prestamo.setIdUsuarioRegistra(
+                        rs.getInt("id_usuario_registra")
+                );
+                prestamo.setFechaPrestamo(
+                        rs.getDate("fecha_prestamo").toLocalDate()
+                );
+                prestamo.setFechaEsperadaDevolucion(
+                        rs.getDate("fecha_esperada_devolucion").toLocalDate()
+                );
+                prestamo.setEstado(
+                        EstadoPrestamo.valueOf(rs.getString("estado"))
+                );
+                prestamo.setObservaciones(rs.getString("observaciones"));
+
+                return Optional.of(prestamo);
+            }
+
+        } catch (SQLException e) {
+            throw new DataAccessException(
+                    "Error al consultar el préstamo.", e
+            );
+        }
+    }
+    public List<Prestamo> buscarActivos() {
+        String sql = """
+            SELECT id_prestamo,
+                   id_usuario_solicitante,
+                   id_usuario_registra,
+                   fecha_prestamo,
+                   fecha_esperada_devolucion,
+                   estado,
+                   observaciones
+            FROM dbo.Prestamo
+            WHERE estado = ?
+            ORDER BY id_prestamo
+            """;
+
+        List<Prestamo> prestamos = new ArrayList<>();
+
+        try (Connection conn = DatabaseConfig.getConnection();
+             PreparedStatement stmt = conn.prepareStatement(sql)) {
+
+            stmt.setString(1, EstadoPrestamo.ACTIVO.name());
+
+            try (ResultSet rs = stmt.executeQuery()) {
+                while (rs.next()) {
+                    Prestamo prestamo = new Prestamo();
+                    prestamo.setIdPrestamo(rs.getInt("id_prestamo"));
+                    prestamo.setIdUsuarioSolicitante(
+                            rs.getInt("id_usuario_solicitante")
+                    );
+                    prestamo.setIdUsuarioRegistra(
+                            rs.getInt("id_usuario_registra")
+                    );
+                    prestamo.setFechaPrestamo(
+                            rs.getDate("fecha_prestamo").toLocalDate()
+                    );
+                    prestamo.setFechaEsperadaDevolucion(
+                            rs.getDate("fecha_esperada_devolucion").toLocalDate()
+                    );
+                    prestamo.setEstado(
+                            EstadoPrestamo.valueOf(rs.getString("estado"))
+                    );
+                    prestamo.setObservaciones(rs.getString("observaciones"));
+
+                    prestamos.add(prestamo);
+                }
+            }
+
+            return prestamos;
+
+        } catch (SQLException e) {
+            throw new DataAccessException(
+                    "Error al consultar los préstamos activos.", e
             );
         }
     }

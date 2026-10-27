@@ -9,7 +9,7 @@ import sigelab.enums.EstadoPrestamo;
 import sigelab.model.DetallePrestamo;
 import sigelab.repository.PrestamoRepository;
 import sigelab.repository.DetallePrestamoRepository;
-
+import java.util.Optional;
 
 import sigelab.enums.EstadoEquipo;
 import sigelab.exception.BusinessException;
@@ -238,5 +238,17 @@ public class PrestamoService {
                 );
             }
         }
+    }
+    public Optional<Prestamo> buscarPorId(int idPrestamo) {
+        if (idPrestamo <= 0) {
+            throw new BusinessException(
+                    "El identificador del préstamo debe ser mayor que cero."
+            );
+        }
+
+        return prestamoRepository.buscarPorId(idPrestamo);
+    }
+    public List<Prestamo> buscarActivos() {
+        return prestamoRepository.buscarActivos();
     }
 }
