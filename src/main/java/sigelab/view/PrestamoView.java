@@ -4,6 +4,7 @@ import java.awt.BorderLayout;
 import java.awt.FlowLayout;
 import java.util.List;
 import java.util.concurrent.ExecutionException;
+
 import javax.swing.*;
 import javax.swing.table.DefaultTableModel;
 
@@ -17,8 +18,11 @@ public class PrestamoView extends JPanel {
     private final int idUsuarioActual;
 
     private final JTextField txtIdPrestamo = new JTextField(8);
+
     private final JButton btnBuscar = new JButton("Buscar por ID");
     private final JButton btnActualizar = new JButton("Ver activos");
+    private final JButton btnNuevo = new JButton("Nuevo préstamo");
+
     private final JLabel lblEstado = new JLabel(" ");
 
     private final DefaultTableModel modeloTabla =
@@ -70,6 +74,7 @@ public class PrestamoView extends JPanel {
         filtros.add(txtIdPrestamo);
         filtros.add(btnBuscar);
         filtros.add(btnActualizar);
+        filtros.add(btnNuevo);
 
         panelSuperior.add(filtros, BorderLayout.CENTER);
         add(panelSuperior, BorderLayout.NORTH);
@@ -90,6 +95,7 @@ public class PrestamoView extends JPanel {
         add(lblEstado, BorderLayout.SOUTH);
 
         btnActualizar.addActionListener(e -> cargarDatos());
+        btnNuevo.addActionListener(e -> mostrarRegistro());
         btnBuscar.addActionListener(e -> buscarPorId());
         txtIdPrestamo.addActionListener(e -> buscarPorId());
     }
@@ -123,6 +129,7 @@ public class PrestamoView extends JPanel {
         lblEstado.setText("Consultando préstamos...");
 
         new SwingWorker<List<Prestamo>, Void>() {
+
             @Override
             protected List<Prestamo> doInBackground() {
                 if (idPrestamo == null) {
@@ -166,6 +173,7 @@ public class PrestamoView extends JPanel {
                     lblEstado.setText("No se pudo completar la consulta.");
 
                     Throwable causa = e.getCause();
+
                     String mensaje = causa instanceof BusinessException
                             ? causa.getMessage()
                             : "No se pudieron consultar los préstamos. "
@@ -188,6 +196,21 @@ public class PrestamoView extends JPanel {
     private void cambiarEstadoCarga(boolean cargando) {
         btnBuscar.setEnabled(!cargando);
         btnActualizar.setEnabled(!cargando);
+        btnNuevo.setEnabled(!cargando);
         txtIdPrestamo.setEnabled(!cargando);
+    }
+
+    private void mostrarRegistro() {
+        PrestamoRegistroDialog dialogo = new PrestamoRegistroDialog(
+                SwingUtilities.getWindowAncestor(this),
+                controller,
+                idUsuarioActual
+        );
+
+        dialogo.setVisible(true);
+
+        if (dialogo.fueRegistrado()) {
+            cargarDatos();
+        }
     }
 }
