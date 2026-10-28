@@ -35,7 +35,7 @@ public class PrestamoRegistroDialog extends JDialog {
             new JTextField(LocalDate.now().plusDays(3).toString());
 
     private final JTextField txtEquipos = new JTextField();
-    private final JTextArea txtObservaciones = new JTextArea(4, 25);
+    private final JTextArea txtObservaciones = new JTextArea(4, 30);
 
     private final JButton btnGuardar =
             new JButton("Registrar préstamo");
@@ -48,7 +48,8 @@ public class PrestamoRegistroDialog extends JDialog {
     private final JLabel lblEstado = new JLabel(" ");
 
     private boolean registrado;
-    private boolean guardando;
+    private boolean ocupado;
+    private boolean resultadoIncierto;
 
     public PrestamoRegistroDialog(
             Window propietario,
@@ -92,9 +93,6 @@ public class PrestamoRegistroDialog extends JDialog {
         txtObservaciones.setLineWrap(true);
         txtObservaciones.setWrapStyleWord(true);
 
-        JPanel contenido = new JPanel(new BorderLayout(5, 5));
-        contenido.add(formulario, BorderLayout.NORTH);
-
         JScrollPane scrollObservaciones =
                 new JScrollPane(txtObservaciones);
 
@@ -104,20 +102,22 @@ public class PrestamoRegistroDialog extends JDialog {
                 )
         );
 
+        JPanel contenido = new JPanel(new BorderLayout(5, 5));
+        contenido.add(formulario, BorderLayout.NORTH);
         contenido.add(scrollObservaciones, BorderLayout.CENTER);
-        add(contenido, BorderLayout.CENTER);
 
-        JPanel inferior = new JPanel(new BorderLayout());
+        add(contenido, BorderLayout.CENTER);
 
         JPanel botones = new JPanel();
         botones.add(btnCancelar);
         botones.add(btnGuardar);
 
-        inferior.add(lblEstado, BorderLayout.NORTH);
-        inferior.add(botones, BorderLayout.SOUTH);
+        JPanel inferior = new JPanel(new BorderLayout());
         inferior.setBorder(
                 BorderFactory.createEmptyBorder(5, 15, 10, 15)
         );
+        inferior.add(lblEstado, BorderLayout.NORTH);
+        inferior.add(botones, BorderLayout.SOUTH);
 
         add(inferior, BorderLayout.SOUTH);
 
@@ -137,9 +137,28 @@ public class PrestamoRegistroDialog extends JDialog {
         setLocationRelativeTo(getOwner());
     }
 
+    private List<Integer> leerIdsEquipo() {
+        List<Integer> ids = new ArrayList<>();
+        String texto = txtEquipos.getText().trim();
+
+        if (!texto.isEmpty()) {
+            for (String valor : texto.split(",", -1)) {
+                int id = Integer.parseInt(valor.trim());
+
+                if (id <= 0) {
+                    throw new NumberFormatException();
+                }
+
+                ids.add(id);
+            }
+        }
+
+        return ids;
+    }
+
     private void registrarPrestamo() {
         final Prestamo prestamo;
-        final List<Integer> idsEquipo = new ArrayList<>();
+        final List<Integer> idsEquipo;
 
         try {
             int idSolicitante =
@@ -151,13 +170,7 @@ public class PrestamoRegistroDialog extends JDialog {
             LocalDate fechaDevolucion =
                     LocalDate.parse(txtFechaDevolucion.getText().trim());
 
-            String equipos = txtEquipos.getText().trim();
-
-            if (!equipos.isEmpty()) {
-                for (String id : equipos.split(",", -1)) {
-                    idsEquipo.add(Integer.parseInt(id.trim()));
-                }
-            }
+            idsEquipo = leerIdsEquipo();
 
             prestamo = new Prestamo(
                     idSolicitante,
@@ -170,8 +183,8 @@ public class PrestamoRegistroDialog extends JDialog {
 
         } catch (NumberFormatException e) {
             mostrarAviso(
-                    "El solicitante y los equipos deben ser números enteros. "
-                            + "Separa los equipos con comas, por ejemplo: 2, 3, 4."
+                    "Escribe un solicitante válido y equipos con IDs "
+                            + "enteros positivos separados por comas."
             );
             return;
 
@@ -204,8 +217,6 @@ public class PrestamoRegistroDialog extends JDialog {
 
             @Override
             protected void done() {
-                boolean permitirReintento = true;
-
                 try {
                     int idPrestamo = get();
                     registrado = true;
@@ -221,7 +232,6 @@ public class PrestamoRegistroDialog extends JDialog {
 
                 } catch (InterruptedException e) {
                     Thread.currentThread().interrupt();
-                    permitirReintento = false;
                     mostrarErrorTecnico();
 
                 } catch (ExecutionException e) {
@@ -229,31 +239,34 @@ public class PrestamoRegistroDialog extends JDialog {
                         lblEstado.setText("Revisa los datos del préstamo.");
                         mostrarAviso(negocio.getMessage());
                     } else {
-                        permitirReintento = false;
                         mostrarErrorTecnico();
                     }
 
                 } finally {
                     cambiarEstadoGuardado(false);
-
-                    if (!permitirReintento) {
-                        btnGuardar.setEnabled(false);
-                        btnQr.setEnabled(false);
-                    }
                 }
             }
         }.execute();
     }
 
     private void agregarEquipoDesdeQr() {
+        final List<Integer> equiposActuales;
+
+        try {
+            equiposActuales = leerIdsEquipo();
+
+        } catch (NumberFormatException e) {
+            mostrarAviso(
+                    "Corrige los IDs de equipos antes de agregar uno desde QR."
+            );
+            return;
+        }
+
         JFileChooser selector = new JFileChooser();
         selector.setDialogTitle("Selecciona la imagen del QR");
         selector.setFileFilter(
                 new FileNameExtensionFilter(
-                        "Imágenes PNG y JPG",
-                        "png",
-                        "jpg",
-                        "jpeg"
+                        "Imágenes PNG y JPG", "png", "jpg", "jpeg"
                 )
         );
 
@@ -263,29 +276,6 @@ public class PrestamoRegistroDialog extends JDialog {
         }
 
         File imagen = selector.getSelectedFile();
-        List<Integer> equiposActuales = new ArrayList<>();
-
-        try {
-            String texto = txtEquipos.getText().trim();
-
-            if (!texto.isEmpty()) {
-                for (String valor : texto.split(",", -1)) {
-                    int id = Integer.parseInt(valor.trim());
-
-                    if (id <= 0) {
-                        throw new NumberFormatException();
-                    }
-
-                    equiposActuales.add(id);
-                }
-            }
-
-        } catch (NumberFormatException e) {
-            mostrarAviso(
-                    "Corrige los IDs de equipos antes de agregar uno desde QR."
-            );
-            return;
-        }
 
         cambiarEstadoGuardado(true);
         lblEstado.setText("Leyendo QR y consultando equipo...");
@@ -306,6 +296,13 @@ public class PrestamoRegistroDialog extends JDialog {
                         mostrarAviso(
                                 "Ese equipo ya está incluido en el préstamo."
                         );
+                        return;
+                    }
+
+                    int respuesta = confirmarEquipo(equipo);
+
+                    if (respuesta != JOptionPane.YES_OPTION) {
+                        lblEstado.setText("No se agregó el equipo.");
                         return;
                     }
 
@@ -346,7 +343,48 @@ public class PrestamoRegistroDialog extends JDialog {
         }.execute();
     }
 
+    private int confirmarEquipo(Equipo equipo) {
+        JPanel datos = new JPanel(new GridLayout(0, 2, 10, 6));
+
+        agregarDato(datos, "ID:", equipo.getIdEquipo());
+        agregarDato(datos, "Código de inventario:",
+                equipo.getCodigoInventario());
+        agregarDato(datos, "Nombre:", equipo.getNombre());
+        agregarDato(datos, "Marca:", equipo.getMarca());
+        agregarDato(datos, "Modelo:", equipo.getModelo());
+        agregarDato(datos, "Estado:", equipo.getEstado());
+
+        JPanel contenido = new JPanel(new BorderLayout(10, 15));
+        contenido.add(datos, BorderLayout.CENTER);
+        contenido.add(
+                new JLabel("¿Agregar este equipo al préstamo?"),
+                BorderLayout.SOUTH
+        );
+
+        return JOptionPane.showConfirmDialog(
+                this,
+                contenido,
+                "Equipo identificado por QR",
+                JOptionPane.YES_NO_OPTION,
+                JOptionPane.QUESTION_MESSAGE
+        );
+    }
+
+    private void agregarDato(JPanel panel, String etiqueta, Object valor) {
+        panel.add(new JLabel(etiqueta));
+
+        String texto = valor == null || valor.toString().isBlank()
+                ? "Sin dato"
+                : valor.toString();
+
+        JTextField campo = new JTextField(texto, 25);
+        campo.setEditable(false);
+        panel.add(campo);
+    }
+
     private void mostrarErrorTecnico() {
+        resultadoIncierto = true;
+
         lblEstado.setText(
                 "Comprueba el estado del préstamo antes de repetirlo."
         );
@@ -361,22 +399,24 @@ public class PrestamoRegistroDialog extends JDialog {
         );
     }
 
-    private void cambiarEstadoGuardado(boolean ocupado) {
-        guardando = ocupado;
+    private void cambiarEstadoGuardado(boolean enProceso) {
+        ocupado = enProceso;
 
-        btnGuardar.setEnabled(!ocupado);
-        btnCancelar.setEnabled(!ocupado);
-        btnQr.setEnabled(!ocupado);
+        boolean permitirEdicion = !enProceso && !resultadoIncierto;
 
-        txtSolicitante.setEnabled(!ocupado);
-        txtFechaPrestamo.setEnabled(!ocupado);
-        txtFechaDevolucion.setEnabled(!ocupado);
-        txtEquipos.setEnabled(!ocupado);
-        txtObservaciones.setEnabled(!ocupado);
+        btnGuardar.setEnabled(permitirEdicion);
+        btnQr.setEnabled(permitirEdicion);
+        btnCancelar.setEnabled(!enProceso);
+
+        txtSolicitante.setEnabled(permitirEdicion);
+        txtFechaPrestamo.setEnabled(permitirEdicion);
+        txtFechaDevolucion.setEnabled(permitirEdicion);
+        txtEquipos.setEnabled(permitirEdicion);
+        txtObservaciones.setEnabled(permitirEdicion);
     }
 
     private void cerrarSiEsPosible() {
-        if (!guardando) {
+        if (!ocupado) {
             dispose();
         }
     }
