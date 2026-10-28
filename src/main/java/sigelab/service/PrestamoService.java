@@ -260,4 +260,37 @@ public class PrestamoService {
 
         return prestamoRepository.buscarActivosPorSolicitante(idSolicitante);
     }
+    public Equipo buscarEquipoParaPrestamoPorCodigo(String codigoInventario) {
+        if (codigoInventario == null || codigoInventario.isBlank()) {
+            throw new BusinessException(
+                    "El código de inventario no puede estar vacío."
+            );
+        }
+
+        String codigo = codigoInventario.trim();
+
+        try {
+            Equipo equipo = equipoRepository.listarTodos()
+                    .stream()
+                    .filter(e -> codigo.equals(e.getCodigoInventario()))
+                    .findFirst()
+                    .orElseThrow(() -> new BusinessException(
+                            "No existe un equipo con ese código de inventario."
+                    ));
+
+            if (equipo.getEstado() != EstadoEquipo.DISPONIBLE) {
+                throw new BusinessException(
+                        "El equipo no está disponible para préstamo. Estado: "
+                                + equipo.getEstado()
+                );
+            }
+
+            return equipo;
+
+        } catch (SQLException e) {
+            throw new DataAccessException(
+                    "No se pudo consultar el equipo identificado por QR.", e
+            );
+        }
+    }
 }

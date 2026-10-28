@@ -4,17 +4,21 @@ import java.awt.BorderLayout;
 import java.awt.Dialog;
 import java.awt.GridLayout;
 import java.awt.Window;
+import java.io.File;
 import java.time.LocalDate;
 import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.ExecutionException;
+import java.util.stream.Collectors;
 
 import javax.swing.*;
+import javax.swing.filechooser.FileNameExtensionFilter;
 
 import sigelab.controller.PrestamoController;
 import sigelab.enums.EstadoPrestamo;
 import sigelab.exception.BusinessException;
+import sigelab.model.Equipo;
 import sigelab.model.Prestamo;
 
 public class PrestamoRegistroDialog extends JDialog {
@@ -23,15 +27,24 @@ public class PrestamoRegistroDialog extends JDialog {
     private final int idUsuarioActual;
 
     private final JTextField txtSolicitante = new JTextField();
+
     private final JTextField txtFechaPrestamo =
             new JTextField(LocalDate.now().toString());
+
     private final JTextField txtFechaDevolucion =
             new JTextField(LocalDate.now().plusDays(3).toString());
+
     private final JTextField txtEquipos = new JTextField();
     private final JTextArea txtObservaciones = new JTextArea(4, 25);
 
-    private final JButton btnGuardar = new JButton("Registrar préstamo");
+    private final JButton btnGuardar =
+            new JButton("Registrar préstamo");
+
     private final JButton btnCancelar = new JButton("Cancelar");
+
+    private final JButton btnQr =
+            new JButton("Agregar equipo desde QR");
+
     private final JLabel lblEstado = new JLabel(" ");
 
     private boolean registrado;
@@ -74,8 +87,7 @@ public class PrestamoRegistroDialog extends JDialog {
 
         formulario.add(new JLabel("IDs de equipos separados por comas:"));
         formulario.add(txtEquipos);
-
-        formulario.add(new JLabel("Observaciones (máximo 250 caracteres):"));
+        formulario.add(btnQr);
 
         txtObservaciones.setLineWrap(true);
         txtObservaciones.setWrapStyleWord(true);
@@ -85,8 +97,11 @@ public class PrestamoRegistroDialog extends JDialog {
 
         JScrollPane scrollObservaciones =
                 new JScrollPane(txtObservaciones);
+
         scrollObservaciones.setBorder(
-                BorderFactory.createTitledBorder("Observaciones")
+                BorderFactory.createTitledBorder(
+                        "Observaciones (máximo 250 caracteres)"
+                )
         );
 
         contenido.add(scrollObservaciones, BorderLayout.CENTER);
@@ -108,6 +123,7 @@ public class PrestamoRegistroDialog extends JDialog {
 
         btnGuardar.addActionListener(e -> registrarPrestamo());
         btnCancelar.addActionListener(e -> cerrarSiEsPosible());
+        btnQr.addActionListener(e -> agregarEquipoDesdeQr());
 
         addWindowListener(new java.awt.event.WindowAdapter() {
             @Override
@@ -222,14 +238,118 @@ public class PrestamoRegistroDialog extends JDialog {
 
                     if (!permitirReintento) {
                         btnGuardar.setEnabled(false);
+                        btnQr.setEnabled(false);
                     }
                 }
             }
         }.execute();
     }
 
+    private void agregarEquipoDesdeQr() {
+        JFileChooser selector = new JFileChooser();
+        selector.setDialogTitle("Selecciona la imagen del QR");
+        selector.setFileFilter(
+                new FileNameExtensionFilter(
+                        "Imágenes PNG y JPG",
+                        "png",
+                        "jpg",
+                        "jpeg"
+                )
+        );
+
+        if (selector.showOpenDialog(this)
+                != JFileChooser.APPROVE_OPTION) {
+            return;
+        }
+
+        File imagen = selector.getSelectedFile();
+        List<Integer> equiposActuales = new ArrayList<>();
+
+        try {
+            String texto = txtEquipos.getText().trim();
+
+            if (!texto.isEmpty()) {
+                for (String valor : texto.split(",", -1)) {
+                    int id = Integer.parseInt(valor.trim());
+
+                    if (id <= 0) {
+                        throw new NumberFormatException();
+                    }
+
+                    equiposActuales.add(id);
+                }
+            }
+
+        } catch (NumberFormatException e) {
+            mostrarAviso(
+                    "Corrige los IDs de equipos antes de agregar uno desde QR."
+            );
+            return;
+        }
+
+        cambiarEstadoGuardado(true);
+        lblEstado.setText("Leyendo QR y consultando equipo...");
+
+        new SwingWorker<Equipo, Void>() {
+            @Override
+            protected Equipo doInBackground() {
+                return controller.identificarEquipoPorQr(imagen);
+            }
+
+            @Override
+            protected void done() {
+                try {
+                    Equipo equipo = get();
+
+                    if (equiposActuales.contains(equipo.getIdEquipo())) {
+                        lblEstado.setText("El equipo ya estaba agregado.");
+                        mostrarAviso(
+                                "Ese equipo ya está incluido en el préstamo."
+                        );
+                        return;
+                    }
+
+                    equiposActuales.add(equipo.getIdEquipo());
+
+                    txtEquipos.setText(
+                            equiposActuales.stream()
+                                    .map(String::valueOf)
+                                    .collect(Collectors.joining(", "))
+                    );
+
+                    lblEstado.setText(
+                            "Equipo agregado: " + equipo.getCodigoInventario()
+                    );
+
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                    lblEstado.setText("Lectura interrumpida.");
+
+                } catch (ExecutionException e) {
+                    lblEstado.setText("No se agregó ningún equipo.");
+                    Throwable causa = e.getCause();
+
+                    if (causa instanceof BusinessException
+                            || causa instanceof IllegalArgumentException) {
+                        mostrarAviso(causa.getMessage());
+                    } else {
+                        mostrarAviso(
+                                "No se pudo procesar el QR. Revisa la imagen "
+                                        + "y la conexión con la base de datos."
+                        );
+                    }
+
+                } finally {
+                    cambiarEstadoGuardado(false);
+                }
+            }
+        }.execute();
+    }
+
     private void mostrarErrorTecnico() {
-        lblEstado.setText("Comprueba el estado del préstamo antes de repetirlo.");
+        lblEstado.setText(
+                "Comprueba el estado del préstamo antes de repetirlo."
+        );
 
         JOptionPane.showMessageDialog(
                 this,
@@ -246,6 +366,7 @@ public class PrestamoRegistroDialog extends JDialog {
 
         btnGuardar.setEnabled(!ocupado);
         btnCancelar.setEnabled(!ocupado);
+        btnQr.setEnabled(!ocupado);
 
         txtSolicitante.setEnabled(!ocupado);
         txtFechaPrestamo.setEnabled(!ocupado);

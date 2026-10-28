@@ -5,6 +5,9 @@ import java.util.Optional;
 
 import sigelab.model.Prestamo;
 import sigelab.service.PrestamoService;
+import java.io.File;
+import sigelab.integration.qr.QrService;
+import sigelab.model.Equipo;
 
 public class PrestamoController {
 
@@ -35,5 +38,12 @@ public class PrestamoController {
 
     public void validarEquipoParaPrestamo(int idEquipo) {
         prestamoService.validarEquipoParaPrestamo(idEquipo);
+    }
+    public Equipo identificarEquipoPorQr(File imagen) {
+        String codigoInventario = new QrService().leer(imagen);
+
+        return prestamoService.buscarEquipoParaPrestamoPorCodigo(
+                codigoInventario
+        );
     }
 }
