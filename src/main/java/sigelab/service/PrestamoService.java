@@ -293,4 +293,19 @@ public class PrestamoService {
             );
         }
     }
+    public List<DetallePrestamo> buscarDetalles(int idPrestamo) {
+        if (idPrestamo <= 0) {
+            throw new BusinessException(
+                    "El identificador del préstamo debe ser mayor que cero."
+            );
+        }
+
+        if (prestamoRepository.buscarPorId(idPrestamo).isEmpty()) {
+            throw new BusinessException(
+                    "El préstamo solicitado no existe."
+            );
+        }
+
+        return detallePrestamoRepository.buscarPorPrestamo(idPrestamo);
+    }
 }

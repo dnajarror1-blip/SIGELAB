@@ -1,6 +1,7 @@
 package sigelab.view;
 
 import java.awt.BorderLayout;
+import java.awt.Dimension;
 import java.awt.FlowLayout;
 import java.util.List;
 import java.util.concurrent.ExecutionException;
@@ -10,6 +11,7 @@ import javax.swing.table.DefaultTableModel;
 
 import sigelab.controller.PrestamoController;
 import sigelab.exception.BusinessException;
+import sigelab.model.DetallePrestamo;
 import sigelab.model.Prestamo;
 
 public class PrestamoView extends JPanel {
@@ -22,8 +24,11 @@ public class PrestamoView extends JPanel {
     private final JButton btnBuscar = new JButton("Buscar por ID");
     private final JButton btnActualizar = new JButton("Ver activos");
     private final JButton btnNuevo = new JButton("Nuevo préstamo");
+    private final JButton btnVerEquipos = new JButton("Ver equipos");
 
     private final JLabel lblEstado = new JLabel(" ");
+
+    private JTable tabla;
 
     private final DefaultTableModel modeloTabla =
             new DefaultTableModel(
@@ -75,11 +80,12 @@ public class PrestamoView extends JPanel {
         filtros.add(btnBuscar);
         filtros.add(btnActualizar);
         filtros.add(btnNuevo);
+        filtros.add(btnVerEquipos);
 
         panelSuperior.add(filtros, BorderLayout.CENTER);
         add(panelSuperior, BorderLayout.NORTH);
 
-        JTable tabla = new JTable(modeloTabla);
+        tabla = new JTable(modeloTabla);
         tabla.setRowHeight(24);
         tabla.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
         tabla.setAutoCreateRowSorter(true);
@@ -97,6 +103,7 @@ public class PrestamoView extends JPanel {
         btnActualizar.addActionListener(e -> cargarDatos());
         btnNuevo.addActionListener(e -> mostrarRegistro());
         btnBuscar.addActionListener(e -> buscarPorId());
+        btnVerEquipos.addActionListener(e -> mostrarEquipos());
         txtIdPrestamo.addActionListener(e -> buscarPorId());
     }
 
@@ -193,13 +200,6 @@ public class PrestamoView extends JPanel {
         }.execute();
     }
 
-    private void cambiarEstadoCarga(boolean cargando) {
-        btnBuscar.setEnabled(!cargando);
-        btnActualizar.setEnabled(!cargando);
-        btnNuevo.setEnabled(!cargando);
-        txtIdPrestamo.setEnabled(!cargando);
-    }
-
     private void mostrarRegistro() {
         PrestamoRegistroDialog dialogo = new PrestamoRegistroDialog(
                 SwingUtilities.getWindowAncestor(this),
@@ -212,5 +212,122 @@ public class PrestamoView extends JPanel {
         if (dialogo.fueRegistrado()) {
             cargarDatos();
         }
+    }
+
+    private void mostrarEquipos() {
+        int filaSeleccionada = tabla.getSelectedRow();
+
+        if (filaSeleccionada < 0) {
+            JOptionPane.showMessageDialog(
+                    this,
+                    "Selecciona un préstamo de la tabla.",
+                    "Ver equipos",
+                    JOptionPane.WARNING_MESSAGE
+            );
+            return;
+        }
+
+        int filaModelo = tabla.convertRowIndexToModel(filaSeleccionada);
+
+        int idPrestamo =
+                ((Number) modeloTabla.getValueAt(filaModelo, 0)).intValue();
+
+        cambiarEstadoCarga(true);
+        lblEstado.setText("Consultando equipos del préstamo...");
+
+        new SwingWorker<List<DetallePrestamo>, Void>() {
+
+            @Override
+            protected List<DetallePrestamo> doInBackground() {
+                return controller.buscarDetalles(idPrestamo);
+            }
+
+            @Override
+            protected void done() {
+                try {
+                    List<DetallePrestamo> detalles = get();
+
+                    DefaultTableModel modeloDetalles =
+                            new DefaultTableModel(
+                                    new String[]{
+                                            "ID detalle",
+                                            "ID préstamo",
+                                            "ID equipo"
+                                    },
+                                    0
+                            ) {
+                                @Override
+                                public boolean isCellEditable(
+                                        int fila,
+                                        int columna
+                                ) {
+                                    return false;
+                                }
+                            };
+
+                    for (DetallePrestamo detalle : detalles) {
+                        modeloDetalles.addRow(new Object[]{
+                                detalle.getIdDetallePrestamo(),
+                                detalle.getIdPrestamo(),
+                                detalle.getIdEquipo()
+                        });
+                    }
+
+                    JTable tablaDetalles = new JTable(modeloDetalles);
+                    tablaDetalles.setRowHeight(24);
+                    tablaDetalles.setAutoCreateRowSorter(true);
+
+                    JScrollPane scroll = new JScrollPane(tablaDetalles);
+                    scroll.setPreferredSize(new Dimension(500, 220));
+
+                    lblEstado.setText(
+                            "Equipos del préstamo " + idPrestamo + ": "
+                                    + detalles.size()
+                    );
+
+                    JOptionPane.showMessageDialog(
+                            PrestamoView.this,
+                            scroll,
+                            "Equipos del préstamo " + idPrestamo,
+                            JOptionPane.INFORMATION_MESSAGE
+                    );
+
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                    lblEstado.setText("Consulta interrumpida.");
+
+                } catch (ExecutionException e) {
+                    lblEstado.setText(
+                            "No se pudieron consultar los equipos."
+                    );
+
+                    Throwable causa = e.getCause();
+
+                    String mensaje = causa instanceof BusinessException
+                            ? causa.getMessage()
+                            : "No se pudieron consultar los equipos "
+                            + "del préstamo. Revisa la conexión "
+                            + "con la base de datos.";
+
+                    JOptionPane.showMessageDialog(
+                            PrestamoView.this,
+                            mensaje,
+                            "Ver equipos",
+                            JOptionPane.ERROR_MESSAGE
+                    );
+
+                } finally {
+                    cambiarEstadoCarga(false);
+                }
+            }
+        }.execute();
+    }
+
+    private void cambiarEstadoCarga(boolean cargando) {
+        btnBuscar.setEnabled(!cargando);
+        btnActualizar.setEnabled(!cargando);
+        btnNuevo.setEnabled(!cargando);
+        btnVerEquipos.setEnabled(!cargando);
+        txtIdPrestamo.setEnabled(!cargando);
     }
 }

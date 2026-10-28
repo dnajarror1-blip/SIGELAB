@@ -8,6 +8,7 @@ import sigelab.service.PrestamoService;
 import java.io.File;
 import sigelab.integration.qr.QrService;
 import sigelab.model.Equipo;
+import sigelab.model.DetallePrestamo;
 
 public class PrestamoController {
 
@@ -45,5 +46,8 @@ public class PrestamoController {
         return prestamoService.buscarEquipoParaPrestamoPorCodigo(
                 codigoInventario
         );
+    }
+    public List<DetallePrestamo> buscarDetalles(int idPrestamo) {
+        return prestamoService.buscarDetalles(idPrestamo);
     }
 }
