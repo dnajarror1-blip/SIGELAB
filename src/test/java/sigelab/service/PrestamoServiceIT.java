@@ -202,4 +202,29 @@ class PrestamoServiceIT {
                 "La lista contiene un préstamo que no está activo."
         );
     }
+    @Test
+    void consultaActivosDelSolicitanteDePrueba() {
+        List<Prestamo> prestamos = new PrestamoService()
+                .buscarActivosPorSolicitante(1);
+
+        assertFalse(
+                prestamos.isEmpty(),
+                "Deben aparecer los préstamos del solicitante de prueba."
+        );
+
+        assertTrue(
+                prestamos.stream().allMatch(
+                        prestamo -> prestamo.getIdUsuarioSolicitante() == 1
+                                && prestamo.getEstado() == EstadoPrestamo.ACTIVO
+                ),
+                "La consulta debe devolver solo préstamos activos del solicitante."
+        );
+
+        assertTrue(
+                new PrestamoService()
+                        .buscarActivosPorSolicitante(Integer.MAX_VALUE)
+                        .isEmpty(),
+                "Un solicitante sin préstamos debe obtener una lista vacía."
+        );
+    }
 }

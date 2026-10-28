@@ -172,4 +172,61 @@ public class PrestamoRepository {
             );
         }
     }
+    public List<Prestamo> buscarActivosPorSolicitante(int idSolicitante) {
+        String sql = """
+            SELECT id_prestamo,
+                   id_usuario_solicitante,
+                   id_usuario_registra,
+                   fecha_prestamo,
+                   fecha_esperada_devolucion,
+                   estado,
+                   observaciones
+            FROM dbo.Prestamo
+            WHERE estado = ?
+              AND id_usuario_solicitante = ?
+            ORDER BY id_prestamo
+            """;
+
+        List<Prestamo> prestamos = new ArrayList<>();
+
+        try (Connection conn = DatabaseConfig.getConnection();
+             PreparedStatement stmt = conn.prepareStatement(sql)) {
+
+            stmt.setString(1, EstadoPrestamo.ACTIVO.name());
+            stmt.setInt(2, idSolicitante);
+
+            try (ResultSet rs = stmt.executeQuery()) {
+                while (rs.next()) {
+                    Prestamo prestamo = new Prestamo();
+
+                    prestamo.setIdPrestamo(rs.getInt("id_prestamo"));
+                    prestamo.setIdUsuarioSolicitante(
+                            rs.getInt("id_usuario_solicitante")
+                    );
+                    prestamo.setIdUsuarioRegistra(
+                            rs.getInt("id_usuario_registra")
+                    );
+                    prestamo.setFechaPrestamo(
+                            rs.getDate("fecha_prestamo").toLocalDate()
+                    );
+                    prestamo.setFechaEsperadaDevolucion(
+                            rs.getDate("fecha_esperada_devolucion").toLocalDate()
+                    );
+                    prestamo.setEstado(
+                            EstadoPrestamo.valueOf(rs.getString("estado"))
+                    );
+                    prestamo.setObservaciones(rs.getString("observaciones"));
+
+                    prestamos.add(prestamo);
+                }
+            }
+
+            return prestamos;
+
+        } catch (SQLException e) {
+            throw new DataAccessException(
+                    "Error al consultar los préstamos del solicitante.", e
+            );
+        }
+    }
 }

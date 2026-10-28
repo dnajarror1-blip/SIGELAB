@@ -251,4 +251,13 @@ public class PrestamoService {
     public List<Prestamo> buscarActivos() {
         return prestamoRepository.buscarActivos();
     }
+    public List<Prestamo> buscarActivosPorSolicitante(int idSolicitante) {
+        if (idSolicitante <= 0) {
+            throw new BusinessException(
+                    "El identificador del solicitante debe ser mayor que cero."
+            );
+        }
+
+        return prestamoRepository.buscarActivosPorSolicitante(idSolicitante);
+    }
 }
