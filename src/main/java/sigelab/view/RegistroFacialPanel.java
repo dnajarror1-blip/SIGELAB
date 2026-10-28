@@ -9,21 +9,34 @@ import java.util.concurrent.ExecutionException;
 import java.util.function.Supplier;
 
 /**
- * Panel de diagnóstico facial de SIGELAB.
+ * SIGELAB - Panel de diagnóstico facial.
  *
- * Esta versión:
- * - Consulta la disponibilidad de FaceID.
- * - Consulta los metadatos de un perfil facial.
+ * Funcionalidades:
+ * - Consultar la disponibilidad del servicio FaceID.
+ * - Consultar los metadatos de un perfil facial.
+ * - Recibir un usuario seleccionado desde otro módulo.
+ * - Mostrar las respuestas del servicio Python.
+ *
+ * Restricciones:
  * - No registra rostros.
- * - No modifica perfiles.
+ * - No modifica perfiles faciales.
  * - No autoriza inicios de sesión.
+ * - No ejecuta operaciones SQL directamente.
  *
- * El acceso a este panel deberá controlarse
- * desde el módulo de seguridad de SIGELAB.
+ * La autorización de acceso al panel corresponde
+ * al módulo de seguridad de SIGELAB.
  */
 public final class RegistroFacialPanel extends JPanel {
 
+    // ============================================
+    // CLIENTE FACIAL
+    // ============================================
+
     private final FacialAuthClient clienteFacial;
+
+    // ============================================
+    // COMPONENTES
+    // ============================================
 
     private final JTextField txtIdUsuario =
             new JTextField(10);
@@ -37,9 +50,14 @@ public final class RegistroFacialPanel extends JPanel {
     private final JTextArea txtResultado =
             new JTextArea();
 
+    // ============================================
+    // CONSTRUCTOR PRINCIPAL
+    // ============================================
+
     public RegistroFacialPanel(
             FacialAuthClient clienteFacial
     ) {
+
         this.clienteFacial = Objects.requireNonNull(
                 clienteFacial,
                 "El cliente FaceID es obligatorio"
@@ -49,17 +67,70 @@ public final class RegistroFacialPanel extends JPanel {
         configurarEventos();
     }
 
+    // ============================================
+    // CONSTRUCTOR CON USUARIO SELECCIONADO
+    // ============================================
+
+    /**
+     * Permite abrir el panel con un usuario
+     * previamente seleccionado.
+     */
+    public RegistroFacialPanel(
+            FacialAuthClient clienteFacial,
+            int idUsuario
+    ) {
+
+        this(clienteFacial);
+
+        seleccionarUsuario(idUsuario);
+    }
+
+    // ============================================
+    // SELECCIONAR USUARIO
+    // ============================================
+
+    /**
+     * Establece el identificador del usuario.
+     *
+     * No realiza consultas HTTP ni operaciones SQL.
+     */
+    public void seleccionarUsuario(int idUsuario) {
+
+        if (idUsuario <= 0) {
+
+            throw new IllegalArgumentException(
+                    "El identificador del usuario debe ser positivo"
+            );
+        }
+
+        txtIdUsuario.setText(
+                Integer.toString(idUsuario)
+        );
+    }
+
+    // ============================================
+    // CONFIGURACIÓN DE LA INTERFAZ
+    // ============================================
+
     private void configurarInterfaz() {
 
-        setLayout(new BorderLayout(15, 15));
+        setLayout(
+                new BorderLayout(15, 15)
+        );
 
         setBorder(
                 BorderFactory.createEmptyBorder(
-                        25, 25, 25, 25
+                        25,
+                        25,
+                        25,
+                        25
                 )
         );
 
-        // Encabezado.
+        // ----------------------------------------
+        // ENCABEZADO
+        // ----------------------------------------
+
         JLabel lblTitulo =
                 new JLabel("Administración FaceID");
 
@@ -85,25 +156,41 @@ public final class RegistroFacialPanel extends JPanel {
         );
 
         encabezado.add(lblTitulo);
+
         encabezado.add(
                 Box.createVerticalStrut(10)
         );
+
         encabezado.add(lblDescripcion);
 
-        // Controles.
-        JPanel controles =
-                new JPanel(new FlowLayout(FlowLayout.LEFT));
+        // ----------------------------------------
+        // CONTROLES
+        // ----------------------------------------
 
-        controles.add(btnConsultarServicio);
+        JPanel controles = new JPanel(
+                new FlowLayout(FlowLayout.LEFT)
+        );
+
+        controles.add(
+                btnConsultarServicio
+        );
 
         controles.add(
                 new JLabel("ID de usuario:")
         );
 
-        controles.add(txtIdUsuario);
-        controles.add(btnConsultarPerfil);
+        controles.add(
+                txtIdUsuario
+        );
 
-        // Área de resultados.
+        controles.add(
+                btnConsultarPerfil
+        );
+
+        // ----------------------------------------
+        // ÁREA DE RESULTADOS
+        // ----------------------------------------
+
         txtResultado.setEditable(false);
 
         txtResultado.setFont(
@@ -115,6 +202,7 @@ public final class RegistroFacialPanel extends JPanel {
         );
 
         txtResultado.setLineWrap(true);
+
         txtResultado.setWrapStyleWord(true);
 
         txtResultado.setText(
@@ -124,9 +212,13 @@ public final class RegistroFacialPanel extends JPanel {
         JScrollPane desplazamiento =
                 new JScrollPane(txtResultado);
 
-        // Organización principal.
-        JPanel superior =
-                new JPanel(new BorderLayout(10, 15));
+        // ----------------------------------------
+        // ORGANIZACIÓN DE COMPONENTES
+        // ----------------------------------------
+
+        JPanel superior = new JPanel(
+                new BorderLayout(10, 15)
+        );
 
         superior.add(
                 encabezado,
@@ -138,13 +230,20 @@ public final class RegistroFacialPanel extends JPanel {
                 BorderLayout.SOUTH
         );
 
-        add(superior, BorderLayout.NORTH);
+        add(
+                superior,
+                BorderLayout.NORTH
+        );
 
         add(
                 desplazamiento,
                 BorderLayout.CENTER
         );
     }
+
+    // ============================================
+    // CONFIGURACIÓN DE EVENTOS
+    // ============================================
 
     private void configurarEventos() {
 
@@ -158,6 +257,10 @@ public final class RegistroFacialPanel extends JPanel {
                 evento -> consultarPerfil()
         );
     }
+
+    // ============================================
+    // CONSULTAR PERFIL
+    // ============================================
 
     private void consultarPerfil() {
 
@@ -193,15 +296,23 @@ public final class RegistroFacialPanel extends JPanel {
         );
     }
 
+    // ============================================
+    // COMUNICACIÓN CON FACEID
+    // ============================================
+
     /**
-     * Ejecuta la comunicación HTTP fuera
-     * del hilo de interfaz de Swing.
+     * Ejecuta las solicitudes HTTP fuera
+     * del hilo principal de Swing.
+     *
+     * De esta manera la ventana no se congela
+     * mientras espera la respuesta de Python.
      */
     private void ejecutarConsulta(
             Supplier<FacialAuthClient.RespuestaFacial> operacion
     ) {
 
         btnConsultarServicio.setEnabled(false);
+
         btnConsultarPerfil.setEnabled(false);
 
         txtResultado.setText(
@@ -211,7 +322,7 @@ public final class RegistroFacialPanel extends JPanel {
         SwingWorker<
                 FacialAuthClient.RespuestaFacial,
                 Void
-                > trabajador = new SwingWorker<>() {
+        > trabajador = new SwingWorker<>() {
 
             @Override
             protected FacialAuthClient.RespuestaFacial
@@ -256,6 +367,7 @@ public final class RegistroFacialPanel extends JPanel {
                 } finally {
 
                     btnConsultarServicio.setEnabled(true);
+
                     btnConsultarPerfil.setEnabled(true);
                 }
             }
