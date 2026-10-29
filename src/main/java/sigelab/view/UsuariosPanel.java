@@ -1,5 +1,6 @@
 package sigelab.view;
 
+import sigelab.controller.FacialAdminController;
 import sigelab.controller.UsuarioController;
 import sigelab.enums.EstadoUsuario;
 import sigelab.model.Usuario;
@@ -22,6 +23,10 @@ public class UsuariosPanel extends JPanel {
 
     // El controller sabe quién tiene la sesión abierta y revisa sus permisos
     private final UsuarioController controller;
+
+    // Guardamos al usuario de la sesión y el controller de las acciones faciales
+    private final Usuario usuarioActual;
+    private final FacialAdminController facialController = new FacialAdminController();
 
     // La tabla y su contenido. El modelo es quien guarda las filas.
     private final DefaultTableModel modelo = new DefaultTableModel(
@@ -47,6 +52,7 @@ public class UsuariosPanel extends JPanel {
     private final JLabel lblMensaje = new JLabel(" ");
 
     public UsuariosPanel(Usuario usuarioActual) {
+        this.usuarioActual = usuarioActual;
         this.controller = new UsuarioController(usuarioActual);
 
         setLayout(new BorderLayout(25, 20));
@@ -80,9 +86,24 @@ public class UsuariosPanel extends JPanel {
         btnCambiar.setFocusPainted(false);
         btnCambiar.addActionListener(e -> alternarEstado());
 
-        JPanel botones = new JPanel(new FlowLayout(FlowLayout.LEFT, 0, 0));
+        // Botones de rostro: solo se muestran si quien tiene la sesión es un admin activo
+        JButton btnRegistrarRostro = new JButton("Registrar rostro");
+        btnRegistrarRostro.setFocusPainted(false);
+        btnRegistrarRostro.addActionListener(e -> registrarRostro());
+
+        JButton btnEliminarRostro = new JButton("Eliminar rostro");
+        btnEliminarRostro.setFocusPainted(false);
+        btnEliminarRostro.addActionListener(e -> eliminarRostro());
+
+        boolean puedeAdministrarRostros = facialController.puedeAdministrarRostros(usuarioActual);
+        btnRegistrarRostro.setVisible(puedeAdministrarRostros);
+        btnEliminarRostro.setVisible(puedeAdministrarRostros);
+
+        JPanel botones = new JPanel(new FlowLayout(FlowLayout.LEFT, 10, 0));
         botones.setOpaque(false);
         botones.add(btnCambiar);
+        botones.add(btnRegistrarRostro);
+        botones.add(btnEliminarRostro);
 
         JPanel zonaTabla = new JPanel(new BorderLayout(0, 12));
         zonaTabla.setOpaque(false);
@@ -205,6 +226,36 @@ public class UsuariosPanel extends JPanel {
         var respuesta = controller.cambiarEstado(u.getIdUsuario(), nuevo);
         mostrarMensaje(respuesta.mensaje(), !respuesta.exito());
         cargarTabla();
+    }
+
+    // Se ejecuta al presionar "Registrar rostro"
+    private void registrarRostro() {
+        Usuario elegido = usuarioSeleccionado();
+        if (elegido == null) {
+            return;
+        }
+        var respuesta = facialController.registrarRostro(usuarioActual, elegido.getIdUsuario());
+        mostrarMensaje(respuesta.mensaje(), !respuesta.exito());
+    }
+
+    // Se ejecuta al presionar "Eliminar rostro"
+    private void eliminarRostro() {
+        Usuario elegido = usuarioSeleccionado();
+        if (elegido == null) {
+            return;
+        }
+        var respuesta = facialController.eliminarRostro(usuarioActual, elegido.getIdUsuario());
+        mostrarMensaje(respuesta.mensaje(), !respuesta.exito());
+    }
+
+    // Devuelve el usuario de la fila elegida, o avisa si no hay ninguna
+    private Usuario usuarioSeleccionado() {
+        int fila = tabla.getSelectedRow();
+        if (fila < 0) {
+            mostrarMensaje("Primero selecciona un usuario de la tabla", true);
+            return null;
+        }
+        return usuarios.get(fila);
     }
 
     // Muestra un mensaje pequeño abajo: rojo si es error, verde si salió bien
