@@ -6,6 +6,8 @@ public enum Modulo {
     ENROLLMENT_FACIAL,   // registrar rostros
     AUDITORIA,           // ver el historial de acciones
     LABORATORIOS_EQUIPOS,
+    CONSULTA_LABORATORIOS,
+    CONSULTA_EQUIPOS,
     RESERVAS_PRESTAMOS,
     MANTENIMIENTO,
     REPORTES_QR,

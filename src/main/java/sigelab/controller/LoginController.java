@@ -2,6 +2,8 @@ package sigelab.controller;
 
 import sigelab.exception.BusinessException;
 import sigelab.exception.DataAccessException;
+import sigelab.exception.DatabaseConfigurationException;
+import sigelab.model.Rol;
 import sigelab.model.Usuario;
 import sigelab.service.Modulo;
 import sigelab.service.PermisoService;
@@ -11,13 +13,22 @@ import java.util.Set;
 
 public class LoginController {
 
-    private final UsuarioService usuarioService = new UsuarioService();
-    private final PermisoService permisoService = new PermisoService();
+    private final UsuarioService usuarioService;
+    private final PermisoService permisoService;
+
+    public LoginController() {
+        this(new UsuarioService(), new PermisoService());
+    }
+
+    public LoginController(UsuarioService usuarios, PermisoService permisos) {
+        usuarioService = usuarios;
+        permisoService = permisos;
+    }
 
     // Aquí guardamos lo que la pantalla necesita saber después de intentar entrar.
     // Un "record" es una clase corta que solo guarda datos.
     public record ResultadoLogin(boolean exito, String mensaje,
-                                 Usuario usuario, Set<Modulo> menu) { }
+                                 Usuario usuario, Set<Modulo> menu, String nombreRol) { }
 
     // La pantalla llama a este método cuando el usuario presiona "Entrar"
     public ResultadoLogin iniciarSesion(String username, String password) {
@@ -26,17 +37,24 @@ public class LoginController {
             Usuario u = usuarioService.autenticar(username, password);
 
             // Según su rol, sacamos las opciones del menú que le tocan
-            Set<Modulo> menu = permisoService.modulosDe(u.getIdRol());
+            Rol rol = usuarioService.buscarRolPorId(u.getIdRol())
+                    .orElseThrow(() -> new BusinessException("El usuario no tiene un rol válido"));
+            Set<Modulo> menu = permisoService.modulosDe(rol);
 
-            return new ResultadoLogin(true, "Bienvenido " + u.getNombre(), u, menu);
+            return new ResultadoLogin(true, "Bienvenido " + u.getNombre(), u, menu, rol.getNombre());
 
         } catch (BusinessException e) {
             // Error de reglas (contraseña mala, usuario inactivo...): se lo mostramos tal cual
-            return new ResultadoLogin(false, e.getMessage(), null, Set.of());
+            return new ResultadoLogin(false, e.getMessage(), null, Set.of(), null);
+
+        } catch (DatabaseConfigurationException e) {
+            return new ResultadoLogin(false,
+                    "La conexión a la base de datos no está configurada. Contacta al administrador.",
+                    null, Set.of(), null);
 
         } catch (DataAccessException e) {
             // Error de base de datos: al usuario no le mostramos detalles técnicos
-            return new ResultadoLogin(false, "No se pudo conectar con la base de datos", null, Set.of());
+            return new ResultadoLogin(false, "No se pudo conectar con la base de datos", null, Set.of(), null);
         }
     }
 }

@@ -83,6 +83,7 @@ Ejecutar los scripts en el siguiente orden:
 
 1. `database/sigelab.sql`
 2. `database/seed/001_roles.sql`
+3. `database/seed/002_estudiante.sql`
 
 Para comprobar las tablas:
 
@@ -93,7 +94,7 @@ FROM SIGELAB.sys.tables;
 
 Resultado esperado: **14 tablas**.
 
-Los roles iniciales son `ADMIN` y `ENCARGADO`.
+Los roles son `ADMIN`, `ENCARGADO` y `ESTUDIANTE`. Sus identificadores se obtienen del catálogo.
 
 ## 7. Compilar y verificar el proyecto
 
@@ -188,3 +189,14 @@ Documentación de la base de datos:
 ## 13. Estado del proyecto
 
 Proyecto en desarrollo. La funcionalidad de los módulos se integrará progresivamente en la rama `develop`.
+
+### Versión integrada de usuarios, catálogos, QR y reportes
+
+- Ejecutar `sigelab.Main` para abrir el login. Se requiere un usuario existente con contraseña BCrypt.
+- ADMIN administra usuarios y catálogos, y accede a QR y reportes. ENCARGADO conserva sus permisos de operación, QR y reportes.
+- ESTUDIANTE consulta laboratorios y equipos en modo de solo lectura; no accede a usuarios, tipos de equipo, mantenimiento, auditoría ni QR/reportes.
+- El QR se genera para un código de inventario existente y su lectura consulta el equipo real. Identificarlo nunca cambia su estado; PRESTADO se muestra bloqueado.
+- Reportes ofrece equipos por estado, préstamos, rango de fechas, historial de equipos, historial de mantenimiento y resumen de cantidades. VENCIDO es una clasificación del reporte, no un estado nuevo en SQL.
+- Las consultas de préstamos y devoluciones usan las tablas compartidas ya existentes. Sus módulos de registro todavía no están integrados en esta rama; sin registros, las consultas muestran resultados vacíos. No se añaden contratos de escritura para esos módulos.
+- El reconocimiento facial continúa pendiente y no forma parte de esta intervención.
+- Las pruebas `*IT` y `AuditoriaServiceTest` pueden utilizar SQL Server; no ejecutar una batería general contra una base compartida. Las pruebas unitarias de QR, reportes y permisos usan colaboradores simulados y archivos temporales.

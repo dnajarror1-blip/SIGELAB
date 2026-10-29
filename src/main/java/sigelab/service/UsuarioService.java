@@ -3,7 +3,9 @@ package sigelab.service;
 import org.mindrot.jbcrypt.BCrypt;
 import sigelab.enums.EstadoUsuario;
 import sigelab.exception.BusinessException;
+import sigelab.model.Rol;
 import sigelab.model.Usuario;
+import sigelab.repository.RolRepository;
 import sigelab.repository.UsuarioRepository;
 
 import java.util.List;
@@ -12,17 +14,45 @@ import java.util.Optional;
 public class UsuarioService {
 
     // Con este objeto hablamos con la base de datos
-    private final UsuarioRepository usuarioRepository = new UsuarioRepository();
+    private final UsuarioRepository usuarioRepository;
+    private final RolRepository rolRepository;
+
+    public UsuarioService() {
+        this(new UsuarioRepository(), new RolRepository());
+    }
+
+    public UsuarioService(UsuarioRepository usuarios, RolRepository roles) {
+        this.usuarioRepository = usuarios;
+        this.rolRepository = roles;
+    }
+
+    public List<Rol> listarRoles() {
+        return rolRepository.listar();
+    }
+
+    public Optional<Rol> buscarRolPorId(int idRol) {
+        return rolRepository.buscarPorId(idRol);
+    }
 
     public Usuario crearUsuario(String nombre, String apellido, String username,
                                 String passwordPlano, String correo, int idRol) {
 
         // Primero revisamos que los datos tengan sentido
-        if (username == null || username.isBlank()) {
-            throw new BusinessException("El username es obligatorio");
+        nombre = validarTexto(nombre, "El nombre", 60);
+        apellido = validarTexto(apellido, "El apellido", 60);
+        username = validarTexto(username, "El username", 50);
+        correo = validarTexto(correo, "El correo", 120);
+        if (!correo.matches("[^\\s@]+@[^\\s@]+")) {
+            throw new BusinessException("El correo no tiene un formato válido");
         }
-        if (passwordPlano == null || passwordPlano.length() < 6) {
+        if (passwordPlano == null || passwordPlano.isBlank() || passwordPlano.length() < 6) {
             throw new BusinessException("La contraseña debe tener al menos 6 caracteres");
+        }
+        if (idRol <= 0) {
+            throw new BusinessException("Debe seleccionar un rol válido");
+        }
+        if (rolRepository.buscarPorId(idRol).isEmpty()) {
+            throw new BusinessException("El rol seleccionado no existe");
         }
 
         // Si ya hay alguien con ese username, no seguimos
@@ -56,7 +86,7 @@ public class UsuarioService {
         }
 
         // Buscamos al usuario por su username
-        Optional<Usuario> encontrado = usuarioRepository.buscarPorUsername(username);
+        Optional<Usuario> encontrado = usuarioRepository.buscarPorUsername(username.trim());
 
         // Si no existe, damos el mismo mensaje que con contraseña mala,
         // así nadie puede adivinar qué usernames existen
@@ -98,5 +128,16 @@ public class UsuarioService {
         if (!cambiado) {
             throw new BusinessException("No se encontró el usuario");
         }
+    }
+
+    private String validarTexto(String valor, String campo, int maximo) {
+        if (valor == null || valor.isBlank()) {
+            throw new BusinessException(campo + " es obligatorio");
+        }
+        String limpio = valor.trim();
+        if (limpio.length() > maximo) {
+            throw new BusinessException(campo + " no puede superar los " + maximo + " caracteres");
+        }
+        return limpio;
     }
 }

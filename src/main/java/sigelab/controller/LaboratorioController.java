@@ -1,6 +1,7 @@
 package sigelab.controller;
 
 import sigelab.enums.EstadoLaboratorio;
+import sigelab.exception.BusinessException;
 import sigelab.model.Laboratorio;
 import sigelab.service.LaboratorioService;
 
@@ -10,11 +11,19 @@ import java.util.Optional;
 public class LaboratorioController {
 
     private final LaboratorioService service;
+    private final boolean soloLectura;
 
     public LaboratorioController() {
+        this(false);
+    }
 
-        this.service =
-                new LaboratorioService();
+    public LaboratorioController(boolean soloLectura) {
+        this(soloLectura, new LaboratorioService());
+    }
+
+    LaboratorioController(boolean soloLectura, LaboratorioService service) {
+        this.soloLectura = soloLectura;
+        this.service = service;
     }
 
 
@@ -27,6 +36,7 @@ public class LaboratorioController {
             EstadoLaboratorio estado
     ) {
 
+        verificarEscritura();
         return service.crear(
                 codigo,
                 nombre,
@@ -83,6 +93,7 @@ public class LaboratorioController {
             EstadoLaboratorio estado
     ) {
 
+        verificarEscritura();
         service.actualizar(
                 idLaboratorio,
                 codigo,
@@ -99,8 +110,14 @@ public class LaboratorioController {
             int idLaboratorio
     ) {
 
+        verificarEscritura();
         service.eliminar(
                 idLaboratorio
         );
+    }
+    private void verificarEscritura() {
+        if (soloLectura) {
+            throw new BusinessException("Solo tienes permiso para consultar laboratorios");
+        }
     }
 }

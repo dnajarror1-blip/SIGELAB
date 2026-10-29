@@ -279,7 +279,6 @@ public class EquipoRepository {
                     modelo = ?,
                     numero_serie = ?,
                     id_laboratorio = ?,
-                    estado = ?,
                     observaciones = ?
                 WHERE id_equipo = ?
                 """;
@@ -326,16 +325,11 @@ public class EquipoRepository {
 
             stmt.setString(
                     8,
-                    equipo.getEstado().name()
-            );
-
-            stmt.setString(
-                    9,
                     equipo.getObservaciones()
             );
 
             stmt.setInt(
-                    10,
+                    9,
                     equipo.getIdEquipo()
             );
 

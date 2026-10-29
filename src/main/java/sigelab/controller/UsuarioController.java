@@ -3,6 +3,7 @@ package sigelab.controller;
 import sigelab.enums.EstadoUsuario;
 import sigelab.exception.BusinessException;
 import sigelab.exception.DataAccessException;
+import sigelab.model.Rol;
 import sigelab.model.Usuario;
 import sigelab.service.Modulo;
 import sigelab.service.PermisoService;
@@ -24,6 +25,17 @@ public class UsuarioController {
 
     public UsuarioController(Usuario usuarioActual) {
         this.usuarioActual = usuarioActual;
+    }
+
+    public Respuesta<List<Rol>> listarRoles() {
+        try {
+            verificarPermiso();
+            return new Respuesta<>(true, "OK", usuarioService.listarRoles());
+        } catch (BusinessException e) {
+            return new Respuesta<>(false, e.getMessage(), List.of());
+        } catch (DataAccessException e) {
+            return new Respuesta<>(false, "No se pudo consultar el catálogo de roles", List.of());
+        }
     }
 
     // Trae todos los usuarios para la tabla
@@ -69,7 +81,8 @@ public class UsuarioController {
     // Aunque la pantalla esconda el botón, aquí también revisamos el permiso.
     // Así nadie puede saltarse el menú y llamar a estos métodos directamente.
     private void verificarPermiso() {
-        if (!permisoService.puedeAcceder(usuarioActual.getIdRol(), Modulo.USUARIOS)) {
+        if (usuarioActual == null
+                || !permisoService.puedeAcceder(usuarioActual.getIdRol(), Modulo.USUARIOS)) {
             throw new BusinessException("No tienes permiso para administrar usuarios");
         }
     }

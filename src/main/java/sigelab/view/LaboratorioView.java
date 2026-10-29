@@ -32,12 +32,26 @@ public class LaboratorioView extends JFrame {
 
 
     public LaboratorioView() {
+        this(false);
+    }
+
+    public LaboratorioView(boolean soloLectura) {
 
         controller =
-                new LaboratorioController();
+                new LaboratorioController(soloLectura);
 
         configurarVentana();
         crearComponentes();
+        if (soloLectura) {
+            btnGuardar.setVisible(false);
+            btnActualizar.setVisible(false);
+            btnEliminar.setVisible(false);
+            btnLimpiar.setVisible(false);
+            for (JTextField campo : new JTextField[]{txtCodigo, txtNombre, txtUbicacion, txtCapacidad}) {
+                campo.setEditable(false);
+            }
+            cmbEstado.setEnabled(false);
+        }
         cargarLaboratorios();
     }
 

@@ -127,7 +127,7 @@ public class LoginForm extends JFrame {
         if (resultado.exito()) {
             // Entró bien: abrimos la ventana principal con el menú de su rol
             // y cerramos el login
-            new MenuPrincipalForm(resultado.usuario(), resultado.menu()).setVisible(true);
+            new MenuPrincipalForm(resultado.usuario(), resultado.menu(), resultado.nombreRol()).setVisible(true);
             dispose();
             return;
         }

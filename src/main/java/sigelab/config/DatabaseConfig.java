@@ -1,5 +1,7 @@
 package sigelab.config;
 
+import sigelab.exception.DatabaseConfigurationException;
+
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.SQLException;
@@ -23,7 +25,7 @@ public class DatabaseConfig {
         );
 
         if (password == null || password.isBlank()) {
-            throw new IllegalStateException(
+            throw new DatabaseConfigurationException(
                     "Falta configurar DB_PASSWORD"
             );
         }

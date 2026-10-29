@@ -41,12 +41,29 @@ public class EquipoView extends JFrame {
 
 
     public EquipoView() {
+        this(false);
+    }
+
+    public EquipoView(boolean soloLectura) {
 
         controller =
-                new EquipoController();
+                new EquipoController(soloLectura);
 
         configurarVentana();
         crearComponentes();
+        if (soloLectura) {
+            btnGuardar.setVisible(false);
+            btnActualizar.setVisible(false);
+            btnEliminar.setVisible(false);
+            btnLimpiar.setVisible(false);
+            for (JTextField campo : new JTextField[]{txtCodigoInventario, txtNombre,
+                    txtMarca, txtModelo, txtNumeroSerie}) {
+                campo.setEditable(false);
+            }
+            txtObservaciones.setEditable(false);
+            cmbTipoEquipo.setEnabled(false);
+            cmbLaboratorio.setEnabled(false);
+        }
         cargarCatalogos();
         cargarEquipos();
     }

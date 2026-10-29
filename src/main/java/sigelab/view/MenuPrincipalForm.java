@@ -7,6 +7,10 @@ import javax.swing.*;
 import java.awt.*;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
+import java.awt.event.WindowAdapter;
+import java.awt.event.WindowEvent;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Set;
 
 public class MenuPrincipalForm extends JFrame {
@@ -23,8 +27,9 @@ public class MenuPrincipalForm extends JFrame {
 
     // El área de la derecha: aquí se cambia lo que se muestra según el botón
     private final JPanel contenido = new JPanel(new BorderLayout());
+    private final List<JFrame> ventanasModulos = new ArrayList<>();
 
-    public MenuPrincipalForm(Usuario usuario, Set<Modulo> menu) {
+    public MenuPrincipalForm(Usuario usuario, Set<Modulo> menu, String nombreRol) {
         this.usuario = usuario;
         setTitle("SIGELAB");
         setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
@@ -45,7 +50,7 @@ public class MenuPrincipalForm extends JFrame {
         lblUsuario.setForeground(Color.WHITE);
         lblUsuario.setAlignmentX(Component.LEFT_ALIGNMENT);
 
-        JLabel lblRol = new JLabel(nombreRol(usuario.getIdRol()));
+        JLabel lblRol = new JLabel(nombreRol);
         lblRol.setForeground(TEXTO_CLARO);
         lblRol.setFont(lblRol.getFont().deriveFont(12f));
         lblRol.setAlignmentX(Component.LEFT_ALIGNMENT);
@@ -56,12 +61,24 @@ public class MenuPrincipalForm extends JFrame {
         lateral.add(lblRol);
         lateral.add(Box.createVerticalStrut(30));
 
-        // Un botón por cada opción que le toca a este rol
-        for (Modulo m : menu) {
-            JButton boton = crearBotonLateral(nombreVisible(m));
-            boton.addActionListener(e -> mostrar(m));
-            lateral.add(boton);
-            lateral.add(Box.createVerticalStrut(6));
+        if (menu.contains(Modulo.USUARIOS)) {
+            agregarOpcion(lateral, "Usuarios", () -> cambiarContenido(new UsuariosPanel(usuario)));
+        }
+        boolean administrarCatalogos = menu.contains(Modulo.LABORATORIOS_EQUIPOS);
+        if (administrarCatalogos || menu.contains(Modulo.CONSULTA_LABORATORIOS)) {
+            agregarOpcion(lateral, "Laboratorios",
+                    () -> abrirModulo(new LaboratorioView(!administrarCatalogos)));
+        }
+        if (administrarCatalogos) {
+            agregarOpcion(lateral, "Tipos de equipo", () -> abrirModulo(new TipoEquipoView()));
+        }
+        if (administrarCatalogos || menu.contains(Modulo.CONSULTA_EQUIPOS)) {
+            agregarOpcion(lateral, "Equipos", () -> abrirModulo(new EquipoView(!administrarCatalogos)));
+        }
+        if (menu.contains(Modulo.REPORTES_QR)) {
+            agregarOpcion(lateral, "Inicio", () -> cambiarContenido(crearInicio(menu)));
+            agregarOpcion(lateral, "QR", () -> cambiarContenido(new QrView(usuario)));
+            agregarOpcion(lateral, "Reportes", () -> cambiarContenido(new ReportesView(usuario)));
         }
 
         // Este espacio elástico empuja "Cerrar sesión" hasta abajo
@@ -75,9 +92,7 @@ public class MenuPrincipalForm extends JFrame {
         contenido.setBackground(Color.WHITE);
         contenido.setBorder(BorderFactory.createEmptyBorder(40, 45, 40, 45));
 
-        // Al abrir, mostramos un saludo
-        cambiarContenido(crearTexto("Hola, " + usuario.getNombre(),
-                "Elige una opción del menú de la izquierda."));
+        cambiarContenido(crearInicio(menu));
 
         // ---------- Armamos la ventana ----------
         setLayout(new BorderLayout());
@@ -90,15 +105,33 @@ public class MenuPrincipalForm extends JFrame {
         setExtendedState(JFrame.MAXIMIZED_BOTH); // se abre ocupando toda la pantalla
     }
 
-    // Decide qué se muestra a la derecha según el botón que se presionó
-    private void mostrar(Modulo m) {
-        if (m == Modulo.USUARIOS) {
-            cambiarContenido(new UsuariosPanel(usuario));
-        } else {
-            // Las demás secciones las hacen otros integrantes; por ahora un aviso
-            cambiarContenido(crearTexto(nombreVisible(m),
-                    "Esta sección todavía no está conectada."));
+    private void agregarOpcion(JPanel lateral, String nombre, Runnable accion) {
+        JButton boton = crearBotonLateral(nombre);
+        boton.addActionListener(e -> accion.run());
+        lateral.add(boton);
+        lateral.add(Box.createVerticalStrut(6));
+    }
+
+    private JComponent crearInicio(Set<Modulo> menu) {
+        JPanel inicio = new JPanel(new BorderLayout(15, 20));
+        inicio.setOpaque(false);
+        inicio.add(crearTexto("Hola, " + usuario.getNombre(),
+                "Elige una opción del menú de la izquierda."), BorderLayout.NORTH);
+        if (menu.contains(Modulo.REPORTES_QR)) {
+            inicio.add(new DashboardPanel(usuario), BorderLayout.CENTER);
         }
+        return inicio;
+    }
+
+    private void abrirModulo(JFrame ventana) {
+        ventanasModulos.add(ventana);
+        ventana.addWindowListener(new WindowAdapter() {
+            @Override
+            public void windowClosed(WindowEvent evento) {
+                ventanasModulos.remove(ventana);
+            }
+        });
+        ventana.setVisible(true);
     }
 
     // Quita lo que había a la derecha y pone lo nuevo
@@ -163,30 +196,12 @@ public class MenuPrincipalForm extends JFrame {
 
     // Cierra esta ventana y vuelve a mostrar el login
     private void cerrarSesion() {
+        for (JFrame ventana : List.copyOf(ventanasModulos)) {
+            ventana.dispose();
+        }
+        ventanasModulos.clear();
         dispose();
         new LoginForm().setVisible(true);
     }
 
-    // Los nombres con que se ve cada opción en pantalla
-    private String nombreVisible(Modulo m) {
-        return switch (m) {
-            case USUARIOS -> "Usuarios";
-            case ENROLLMENT_FACIAL -> "Registro facial";
-            case AUDITORIA -> "Auditoría";
-            case LABORATORIOS_EQUIPOS -> "Laboratorios y equipos";
-            case RESERVAS_PRESTAMOS -> "Reservas y préstamos";
-            case MANTENIMIENTO -> "Mantenimiento";
-            case REPORTES_QR -> "Reportes y QR";
-            case NOTIFICACIONES -> "Notificaciones";
-        };
-    }
-
-    // El nombre del rol según su id (1 = ADMIN, 2 = ENCARGADO)
-    private String nombreRol(int idRol) {
-        return switch (idRol) {
-            case 1 -> "Administrador";
-            case 2 -> "Encargado";
-            default -> "Usuario";
-        };
-    }
 }

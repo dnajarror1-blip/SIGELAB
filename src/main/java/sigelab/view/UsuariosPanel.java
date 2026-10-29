@@ -2,6 +2,7 @@ package sigelab.view;
 
 import sigelab.controller.UsuarioController;
 import sigelab.enums.EstadoUsuario;
+import sigelab.model.Rol;
 import sigelab.model.Usuario;
 
 import javax.swing.*;
@@ -35,6 +36,7 @@ public class UsuariosPanel extends JPanel {
 
     // Los usuarios que se están mostrando, en el mismo orden que las filas de la tabla
     private List<Usuario> usuarios = List.of();
+    private List<Rol> roles = List.of();
 
     // Campos del formulario
     private final JTextField txtNombre = new JTextField();
@@ -42,12 +44,22 @@ public class UsuariosPanel extends JPanel {
     private final JTextField txtUsername = new JTextField();
     private final JTextField txtCorreo = new JTextField();
     private final JPasswordField txtPassword = new JPasswordField();
-    private final JComboBox<String> cmbRol = new JComboBox<>(new String[]{"Encargado", "Administrador"});
+    private final JComboBox<Rol> cmbRol = new JComboBox<>();
 
     private final JLabel lblMensaje = new JLabel(" ");
 
     public UsuariosPanel(Usuario usuarioActual) {
         this.controller = new UsuarioController(usuarioActual);
+
+        cmbRol.setRenderer(new DefaultListCellRenderer() {
+            @Override
+            public Component getListCellRendererComponent(JList<?> list, Object value, int index,
+                                                           boolean selected, boolean focus) {
+                super.getListCellRendererComponent(list, value, index, selected, focus);
+                setText(value instanceof Rol rol ? rol.getNombre() : "Selecciona un rol");
+                return this;
+            }
+        });
 
         setLayout(new BorderLayout(25, 20));
         setOpaque(false);
@@ -137,7 +149,22 @@ public class UsuariosPanel extends JPanel {
         add(lblMensaje, BorderLayout.SOUTH);
 
         // Llenamos la tabla apenas se abre
+        cargarRoles();
         cargarTabla();
+    }
+
+    private void cargarRoles() {
+        var respuesta = controller.listarRoles();
+        if (!respuesta.exito()) {
+            mostrarMensaje(respuesta.mensaje(), true);
+            return;
+        }
+        roles = respuesta.dato();
+        cmbRol.removeAllItems();
+        for (Rol rol : roles) {
+            cmbRol.addItem(rol);
+        }
+        cmbRol.setSelectedIndex(-1);
     }
 
     // Pide los usuarios al controller y llena la tabla
@@ -164,8 +191,11 @@ public class UsuariosPanel extends JPanel {
 
     // Se ejecuta al presionar "Crear usuario"
     private void crear() {
-        // El combo tiene Encargado (posición 0) y Administrador (posición 1)
-        int idRol = cmbRol.getSelectedIndex() == 0 ? 2 : 1;
+        Rol rol = (Rol) cmbRol.getSelectedItem();
+        if (rol == null) {
+            mostrarMensaje("Debe seleccionar un rol", true);
+            return;
+        }
 
         var respuesta = controller.crear(
                 txtNombre.getText().trim(),
@@ -173,7 +203,7 @@ public class UsuariosPanel extends JPanel {
                 txtUsername.getText().trim(),
                 new String(txtPassword.getPassword()),
                 txtCorreo.getText().trim(),
-                idRol);
+                rol.getIdRol());
 
         mostrarMensaje(respuesta.mensaje(), !respuesta.exito());
 
@@ -214,10 +244,7 @@ public class UsuariosPanel extends JPanel {
     }
 
     private String nombreRol(int idRol) {
-        return switch (idRol) {
-            case 1 -> "Administrador";
-            case 2 -> "Encargado";
-            default -> "Usuario";
-        };
+        return roles.stream().filter(rol -> rol.getIdRol() == idRol)
+                .map(Rol::getNombre).findFirst().orElse("Rol no disponible");
     }
 }

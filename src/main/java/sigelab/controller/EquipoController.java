@@ -1,5 +1,6 @@
 package sigelab.controller;
 
+import sigelab.exception.BusinessException;
 import sigelab.model.Equipo;
 import sigelab.model.Laboratorio;
 import sigelab.model.TipoEquipo;
@@ -15,9 +16,19 @@ public class EquipoController {
     private final EquipoService equipoService;
     private final TipoEquipoService tipoEquipoService;
     private final LaboratorioService laboratorioService;
+    private final boolean soloLectura;
 
     public EquipoController() {
-        this.equipoService = new EquipoService();
+        this(false);
+    }
+
+    public EquipoController(boolean soloLectura) {
+        this(soloLectura, new EquipoService());
+    }
+
+    EquipoController(boolean soloLectura, EquipoService equipoService) {
+        this.soloLectura = soloLectura;
+        this.equipoService = equipoService;
         this.tipoEquipoService = new TipoEquipoService();
         this.laboratorioService = new LaboratorioService();
     }
@@ -34,6 +45,7 @@ public class EquipoController {
             String observaciones
     ) {
 
+        verificarEscritura();
         return equipoService.crear(
                 codigoInventario,
                 nombre,
@@ -89,6 +101,7 @@ public class EquipoController {
             String observaciones
     ) {
 
+        verificarEscritura();
         equipoService.actualizar(
                 idEquipo,
                 codigoInventario,
@@ -107,6 +120,7 @@ public class EquipoController {
             int idEquipo
     ) {
 
+        verificarEscritura();
         equipoService.eliminar(
                 idEquipo
         );
@@ -121,5 +135,11 @@ public class EquipoController {
 
     public List<Laboratorio> listarLaboratorios() {
         return laboratorioService.listar();
+    }
+
+    private void verificarEscritura() {
+        if (soloLectura) {
+            throw new BusinessException("Solo tienes permiso para consultar equipos");
+        }
     }
 }
