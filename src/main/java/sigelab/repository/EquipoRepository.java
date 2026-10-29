@@ -79,4 +79,30 @@ public class EquipoRepository {
         equipo.setObservaciones(rs.getString("observaciones"));
         return equipo;
     }
+
+    public Optional<Equipo> buscarPorCodigoInventario(String codigoInventario) throws SQLException {
+        if (codigoInventario == null || codigoInventario.isBlank()) {
+            return Optional.empty();
+        }
+
+        String sql = """
+                SELECT id_equipo, codigo_inventario, nombre, id_tipo_equipo,
+                       marca, modelo, numero_serie, id_laboratorio,
+                       estado, observaciones
+                FROM dbo.Equipo
+                WHERE codigo_inventario = ?
+                """;
+
+        try (Connection conn = DatabaseConfig.getConnection();
+             PreparedStatement stmt = conn.prepareStatement(sql)) {
+            stmt.setString(1, codigoInventario.trim());
+            try (ResultSet rs = stmt.executeQuery()) {
+                if (rs.next()) {
+                    return Optional.of(mapearEquipo(rs));
+                }
+            }
+        }
+        return Optional.empty();
+    }
+
 }
