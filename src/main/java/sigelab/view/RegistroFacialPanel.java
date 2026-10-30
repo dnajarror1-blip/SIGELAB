@@ -132,7 +132,7 @@ public final class RegistroFacialPanel extends JPanel {
         // ----------------------------------------
 
         JLabel lblTitulo =
-                new JLabel("Administración FaceID");
+                new JLabel("Diagnóstico FaceID");
 
         lblTitulo.setFont(
                 lblTitulo.getFont().deriveFont(
@@ -143,7 +143,7 @@ public final class RegistroFacialPanel extends JPanel {
 
         JLabel lblDescripcion = new JLabel(
                 "Consultas de diagnóstico. "
-                        + "El registro facial todavía no está habilitado."
+                        + "La administración de perfiles se realiza desde Usuarios."
         );
 
         JPanel encabezado = new JPanel();

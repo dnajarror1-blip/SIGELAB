@@ -36,7 +36,7 @@ Esta integración se estandariza en **Python 3.12.x**, no en cualquier versión 
 
 ## Bootstrap del primer perfil ADMIN
 
-`enroll-user.sh` permite registrar el primer perfil facial de un ADMIN **ya existente y ACTIVO** en la base operativa SIGELAB mientras facial-admin todavía no está integrada. Es una operación administrativa local de enrollment, **no un bypass de autenticación**: no abre sesión, no devuelve una sesión y no cambia el login obligatorio de contraseña más rostro.
+`enroll-user.sh` permite registrar el primer perfil facial de un ADMIN **ya existente y ACTIVO** en la base operativa SIGELAB antes de poder iniciar la primera sesión y administrar perfiles desde Usuarios. Es una operación administrativa local de enrollment, **no un bypass de autenticación**: no abre sesión, no devuelve una sesión y no cambia el login obligatorio de contraseña más rostro.
 
 Prerrequisitos: entorno Python 3.12 preparado, ODBC y configuración del servicio correctos, las tablas oficiales existentes, una cuenta ADMIN activa creada por el proceso normal de usuarios, clave AES persistente, FACIAL_API_KEY y threshold configurados, y FastAPI iniciado con `start-facial.sh`. El operador debe estar autorizado para administrar esa instalación y tener acceso a su configuración privada. Esta operación consulta SQL Server y activa la captura mediante el servicio: ejecutarla solo con autorización explícita.
 
@@ -83,30 +83,47 @@ AuditService conserva su política existente: registro general no transaccional 
 
 AuditoriaFacial registra inicio, éxito/fallo y causas controladas sin datos biométricos. Score/threshold se guardan al comparar. No se inventan usuarios para eventos que no pueden satisfacer su FK; errores previos a configuración/BD válida tampoco pueden garantizar auditoría SQL. Una caída de persistencia impide completar el resultado facial satisfactoriamente.
 
-## Conexión de feature/facial-admin
+## Administración facial desde Usuarios
 
-No se crearon FacialAdminService, FacialAdminController ni una View administrativa nueva. El responsable debe:
+La capa Java se implementó directamente sobre la integración actual, sin integrar la rama antigua feature/facial-admin ni recuperar su LoginService. El flujo es:
 
-- Tomar adminUserId del usuario autenticado, no de un campo editable.
-- Consumir consultarPerfil, registrar(...,false), registrar(...,true) y eliminar; mostrar reemplazo como acción explícita.
-- Mantener la revalidación Java incorporada en registrar/eliminar y manejar BusinessException/ErrorComunicacion.
-- Ejecutar las operaciones con SwingWorker y refrescar status después del resultado.
-- No enviar password/hash ni solicitar la clave AES. No interpretar consultarEstado o HTTP 200 como autenticación.
+`UsuariosPanel → FacialAdminController → FacialAdminService → FacialAuthClient → FastAPI`
 
-El panel RegistroFacialPanel existente sigue siendo diagnóstico y no sustituye esa administración.
+El constructor público de UsuariosPanel recibe el usuario autenticado. FacialAdminController captura su ID estable y sus acciones solo reciben el ID objetivo, obtenido de la fila seleccionada de la tabla (con conversión al índice del modelo si hay ordenación). No hay campos editables para introducir el actor o el ID objetivo facial. Los campos de creación de usuarios conservan su función original.
+
+FacialAdminService valida actor no nulo, ID del actor y objetivo positivos, y llama a UsuarioService.exigirAdministradorActivo antes de cada operación, incluida la consulta de estado. No usa IDs fijos de rol ni confía en el rol/estado guardado en la sesión. La autorización existente del cliente y las comprobaciones ADMIN en Python se conservan. ENCARGADO, ESTUDIANTE y ADMIN inactivo no están autorizados.
+
+- **Estado facial:** consulta consultarPerfil y muestra si el perfil está registrado y activo.
+- **Registrar rostro:** comprueba el estado para detectar un perfil existente y sugerir Reemplazar rostro; llama registrar(targetUserId, adminUserId, false). No reemplaza implícitamente.
+- **Reemplazar rostro:** exige confirmación en la interfaz y llama registrar(targetUserId, adminUserId, true).
+- **Eliminar rostro:** exige confirmación, informa de la necesidad de registrar un nuevo perfil para volver a iniciar sesión y llama eliminar(targetUserId, adminUserId).
+
+FacialAdminController devuelve resultados tipados y mensajes controlados ante permisos denegados, errores de comunicación/respuesta y problemas de acceso/configuración de datos. No muestra stack traces ni respuestas HTTP crudas. El cliente se configura al ejecutar una operación, no al construir la pantalla.
+
+Las operaciones faciales y el refresco posterior se ejecutan mediante SwingWorker. Mientras una esté en curso, se deshabilitan los cuatro botones faciales, la tabla y las acciones de crear/cambiar estado para evitar duplicados y cambios de objetivo. Al terminar se rehabilitan; sin selección los botones faciales quedan deshabilitados. Una mutación confirmada sigue mostrándose como exitosa aunque falle la consulta posterior del estado, y se solicita actualizarlo antes de reintentar.
+
+RegistroFacialPanel se conserva como herramienta de diagnóstico, con título y texto que remiten a Usuarios para administrar perfiles. No se añadió al menú ni se convirtió en una segunda administración. Los contratos HTTP, el login, la auditoría de login y Python no se modificaron en esta ampliación.
+
+Se ejecutaron y aprobaron las **25 pruebas nuevas de administración facial**, con dobles en memoria y Swing headless para autorización, operaciones, manejo de errores, selección/actor, confirmaciones, bloqueo de doble clic y refresco:
+
+- `FacialAdminServiceTest`: **13 passed**.
+- `FacialAdminControllerTest`: **6 passed**.
+- `UsuariosPanelFacialTest`: **6 passed**.
+
+La administración facial Java queda **validada de forma aislada**. Esto no implica validación biométrica real ni FaceID end-to-end.
 
 ## Pruebas ejecutadas y validaciones pendientes
 
-Maven fue ejecutado con pruebas unitarias/aisladas. Resultado final: **173 pruebas, 0 failures, 0 errors, 0 skipped, BUILD SUCCESS**. Se verificaron los reportes de 28 suites: **ninguna clase `*IT` fue ejecutada**. No se accedió a SQL Server ni se ejecutaron cámara, enrollment real o migraciones.
+La ejecución más reciente de Maven abarcó **198 pruebas Java aisladas**, ejecutadas clase por clase para detenerse ante un fallo. Resultado agregado de las 31 clases: **198 passed, 0 failures, 0 errors, 0 skipped**. Todas las invocaciones finalizaron con **BUILD SUCCESS**. Se verificaron los reportes: **ninguna clase `*IT` fue ejecutada**. No se accedió a SQL Server ni se ejecutaron cámara, enrollment real o migraciones.
 
-La primera ejecución tuvo 14 errores `java.net.SocketException: Operation not permitted` al crear los servidores HTTP simulados, debido a la restricción de sockets del sandbox. Al repetir con permiso para servidores HTTP locales, las 173 pruebas pasaron **sin cambios de código**. El resultado inicial no confirmó una regresión del contrato HTTP.
+Como antecedente, una ejecución anterior a la ampliación administrativa tuvo 14 errores `java.net.SocketException: Operation not permitted` al crear los servidores HTTP simulados, debido a la restricción de sockets del sandbox. Al repetir con permiso para servidores HTTP locales, esa incidencia se resolvió **sin cambios de código**. La ejecución más reciente de las 198 pruebas también contó con permiso para esos servidores locales y no presentó errores.
 
-El POM contiene una única declaración de Surefire **3.5.5** para JUnit 5, con exclusión explícita `**/*IT.java`. Las pruebas Java validaron de forma aislada la coordinación del login en dos factores, la solicitud de LOGIN_EXITOSO después del facial y la revalidación, los rechazos de acceso, el cliente HTTP simulado, status/enroll/delete y permisos ADMIN. Esto no verifica persistencia SQL ni reconocimiento biométrico real.
+El POM contiene una única declaración de Surefire **3.5.5** para JUnit 5, con exclusión explícita `**/*IT.java`. Las regresiones ejecutadas de **login, usuarios, auditoría y permisos no mostraron fallos**. Las pruebas Java validaron de forma aislada la coordinación del login en dos factores, la solicitud de LOGIN_EXITOSO después del facial y la revalidación, los rechazos de acceso, el cliente HTTP simulado, status/enroll/delete y permisos ADMIN. Esto no verifica persistencia SQL ni reconocimiento biométrico real.
 
 **Pytest continúa pendiente:** el entorno disponible solo tiene Python **3.14.8**, mientras que la integración se estandarizó en **Python 3.12.x**; además faltan pytest y varias dependencias. No se ejecutaron pruebas Python ni se preparó un entorno incompatible. Python conserva pruebas de cifrado, pipeline, similitud indirecta/enrollment, coordinación interna y agrega contratos operativos, autorización, transacciones, configuración y proceso simulado. pytest excluye por defecto los cinco módulos que escriben en SQL, antes de importarlos. Esos módulos también tienen skipUnless para unittest. SIGELAB_RUN_SQL_TESTS=1 es una activación deliberada, no autorización automática: solo habilitar tras permiso y con una BD de pruebas dedicada.
 
 La inspección previa al commit confirmó que `.env.docker` es un archivo **local, ignorado y no versionado**. Debe permanecer fuera del commit; no se reproduce su contenido.
 
-La validación real con **SQL Server, cámara, liveness, calibración del threshold y enrollment real sigue pendiente**. FaceID no está completamente validado de extremo a extremo.
+Siguen pendientes **pytest con Python 3.12, SQL Server real, cámara, liveness, calibración/configuración real del threshold y enrollment real**. La **validación FaceID end-to-end sigue pendiente**; los resultados Java aislados no permiten declararla completada.
 
 Comandos para pruebas aisladas: desde facial-service y con un entorno Python 3.12 preparado, `.venv/bin/python -m pytest`; desde la raíz, `./mvnw test`. Ejecutarlos únicamente dentro de la autorización correspondiente. No usar selección de IT ni ejecutar scripts de registro/preparación sin revisar sus efectos. LoginControllerIT tiene FaceID simulado explícitamente y crea usuarios reales de prueba; está protegido por opt-in y no valida biometría real.
