@@ -53,8 +53,8 @@ class UsuarioAuditoriaTest {
         usuario.setIdUsuario(7); usuario.setEstado(EstadoUsuario.ACTIVO);
         usuario.setPasswordHash(BCrypt.hashpw("clave123",BCrypt.gensalt(4)));
     }
-    @Test void loginValidoRegistraEvento() {
-        assertSame(usuario, service.autenticar("ana","clave123")); assertEquals(List.of("LOGIN_EXITOSO"),acciones);
+    @Test void credencialesValidasNoRegistranLoginExitoso() {
+        assertSame(usuario, service.autenticar("ana","clave123")); assertTrue(acciones.isEmpty());
     }
     @ParameterizedTest @ValueSource(strings={"inexistente","password","inactivo","vacio"})
     void loginInvalidoRegistraFallo(String caso) {

@@ -1,158 +1,60 @@
+"""Contrato HTTP operativo: sin cámara, SQL ni carga de modelos."""
 import unittest
 from unittest.mock import patch
-
 from fastapi.testclient import TestClient
-
-import app.main as facial
+from app.main import app, validar_clave_api
+from app.administracion_repository import RechazoFacial
 
 
 class TestMensajesVerificacion(unittest.TestCase):
-
     def setUp(self):
-        self.dependencia_anterior = (
-            facial.app.dependency_overrides.get(
-                facial.validar_clave_api
-            )
-        )
-
-        facial.app.dependency_overrides[
-            facial.validar_clave_api
-        ] = lambda: True
-
-        self.client = TestClient(facial.app)
+        app.dependency_overrides[validar_clave_api] = lambda: True
+        self.client = TestClient(app)
+        self.check = patch("app.main.verificar_base_face").start()
 
     def tearDown(self):
         self.client.close()
+        app.dependency_overrides.pop(validar_clave_api, None)
+        patch.stopall()
 
-        if self.dependencia_anterior is None:
-            facial.app.dependency_overrides.pop(
-                facial.validar_clave_api,
-                None,
-            )
-        else:
-            facial.app.dependency_overrides[
-                facial.validar_clave_api
-            ] = self.dependencia_anterior
+    def test_matched_conserva_decision_biometrica(self):
+        for matched in (True, False):
+            result = {"userId": 7, "matched": matched, "score": .9 if matched else .1,
+                      "threshold": .6, "livenessPassed": True}
+            with patch("app.auth_service.verificar", return_value=result) as verify:
+                response = self.client.post("/face/verify", json={"userId": 7})
+            self.assertEqual(response.status_code, 200)
+            self.assertEqual(response.json(), result)
+            verify.assert_called_once_with(7)
 
-    def verificar_caso(
-        self,
-        estado_liveness,
-        presencia_real,
-        texto_esperado,
-    ):
-        usuario_activo = {
-            "usuario_existe": True,
-            "usuario_activo": True,
-            "perfil_activo": True,
-        }
+    def test_error_nativo_no_revela_detalles(self):
+        with patch("app.auth_service.verificar", side_effect=RuntimeError("dato privado")):
+            response = self.client.post("/face/verify", json={"userId": 7})
+        self.assertEqual(response.status_code, 503)
+        self.assertNotIn("privado", response.text)
 
-        resultado_pipeline = {
-            "similarity": 0.87,
-            "livenessPassed": presencia_real,
-            "livenessStatus": estado_liveness,
-            "livenessScore": 0.75,
-        }
+    def test_esquemas_rechazan_credenciales_y_actor_ausente(self):
+        for payload in ({"userId": 0}, {"userId": True}, {"userId": "7"},
+                        {"userId": 7, "password": "prueba"}):
+            self.assertEqual(self.client.post("/face/verify", json=payload).status_code, 422)
+        self.assertEqual(self.client.post("/face/enroll", json={"userId": 7}).status_code, 422)
 
-        with (
-            patch(
-                "app.main.verificar_base_face"
-            ),
-            patch(
-                "app.main.consultar_estado_facial",
-                return_value=usuario_activo,
-            ),
-            patch(
-                "app.main.obtener_embedding_facial",
-                return_value=b"EMBEDDING_SIMULADO",
-            ),
-            patch(
-                "app.main.validar_embedding"
-            ),
-            patch(
-                "scripts.diagnostico_embedding.capturar_rostro",
-                return_value=object(),
-            ) as captura,
-            patch(
-                "app.main.analizar_captura_facial",
-                return_value=resultado_pipeline,
-            ),
-            patch(
-                "app.main.registrar_auditoria_verificacion"
-            ) as auditoria,
-        ):
+    def test_enroll_y_delete_transportan_actor(self):
+        with patch("app.auth_service.registrar", return_value={"userId": 7, "registered": True}) as enroll:
+            self.assertEqual(self.client.post("/face/enroll", json={"userId": 7, "adminUserId": 42}).status_code, 200)
+            enroll.assert_called_once_with(7, 42, False)
+        with patch("app.auth_service.eliminar", return_value={"userId": 7, "deleted": True}) as delete:
+            self.assertEqual(self.client.delete("/face/profile/7?adminUserId=42").status_code, 200)
+            delete.assert_called_once_with(7, 42)
+        self.assertEqual(self.client.delete("/face/profile/7").status_code, 422)
 
-            respuesta = self.client.post(
-                "/face/verify",
-                json={"userId": 1},
-            )
+    def test_autorizacion_denegada_se_traduce_a_403(self):
+        with patch("app.auth_service.registrar", side_effect=RechazoFacial(403, "Administrador requerido")):
+            self.assertEqual(self.client.post("/face/enroll", json={"userId": 7, "adminUserId": 42}).status_code, 403)
 
-            self.assertEqual(
-                respuesta.status_code,
-                200,
-                respuesta.text,
-            )
-
-            datos = respuesta.json()
-
-            self.assertIn(
-                texto_esperado,
-                datos["message"],
-            )
-
-            self.assertEqual(
-                datos["result"],
-                "DIAGNOSTIC_ONLY",
-            )
-
-            self.assertFalse(
-                datos["verified"]
-            )
-
-            self.assertFalse(
-                datos["authenticationAllowed"]
-            )
-
-            self.assertEqual(
-                datos["livenessPassed"],
-                presencia_real,
-            )
-
-            captura.assert_called_once()
-            auditoria.assert_called_once()
-
-            self.assertFalse(
-                facial.BLOQUEO_CAMARA.locked()
-            )
-
-    def test_captura_no_concluyente(self):
-        self.verificar_caso(
-            estado_liveness="input_rejected",
-            presencia_real=None,
-            texto_esperado="Captura no concluyente",
-        )
-
-        print(
-            "OK: Captura no concluyente identificada"
-        )
-
-    def test_presencia_real_rechazada(self):
-        self.verificar_caso(
-            estado_liveness="rejected",
-            presencia_real=False,
-            texto_esperado="no supero la comprobacion",
-        )
-
-        print(
-            "OK: Presencia real rechazada correctamente"
-        )
-
-    def test_diagnostico_completado(self):
-        self.verificar_caso(
-            estado_liveness="passed",
-            presencia_real=True,
-            texto_esperado="comparacion facial completada",
-        )
-
-        print(
-            "OK: Diagnostico completado correctamente"
-        )
+    def test_status_sin_embedding(self):
+        state = {"id_usuario": 7, "usuario_existe": True, "usuario_activo": True,
+                 "perfil_registrado": False, "perfil_activo": False}
+        with patch("app.main.consultar_estado_facial", return_value=state):
+            response = self.client.get("/face/status/7")
+        self.assertEqual(response.json(), state)

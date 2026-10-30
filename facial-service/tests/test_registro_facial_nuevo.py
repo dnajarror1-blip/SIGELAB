@@ -13,6 +13,7 @@ No utiliza la camara ni modifica usuarios reales.
 import secrets
 import struct
 import unittest
+import os
 
 from uuid import uuid4
 
@@ -32,6 +33,7 @@ from app.perfil_storage import (
 BASE_PRUEBAS = "SIGELAB_TEST_FACE"
 
 
+@unittest.skipUnless(os.getenv("SIGELAB_RUN_SQL_TESTS") == "1", "SQL real requiere autorización explícita")
 class TestRegistroFacialNuevo(unittest.TestCase):
 
     def test_registro_duplicado_y_rollback(self):

@@ -395,6 +395,7 @@ class TestFacialEnrollment(unittest.TestCase):
                 enrollment.cv2,
                 "imshow"
             ),
+            patch.object(enrollment.cv2, "getWindowProperty", return_value=1),
             patch.object(
                 enrollment.cv2,
                 "waitKey",
@@ -469,6 +470,7 @@ class TestFacialEnrollment(unittest.TestCase):
                 enrollment.cv2,
                 "imshow"
             ),
+            patch.object(enrollment.cv2, "getWindowProperty", return_value=1),
             patch.object(
                 enrollment.cv2,
                 "waitKey",

@@ -6,6 +6,9 @@ import sigelab.exception.DatabaseConfigurationException;
 import sigelab.model.Rol;
 import sigelab.model.Usuario;
 import sigelab.service.Modulo;
+import sigelab.service.AutenticacionService;
+import sigelab.service.AuditService;
+import sigelab.enums.EstadoUsuario;
 import sigelab.service.PermisoService;
 import sigelab.service.UsuarioService;
 
@@ -52,6 +55,8 @@ class LoginControllerTest {
     void loginUsaElNombreDelRolRealAunqueSuIdSeaDistinto() {
         Usuario usuario = new Usuario();
         usuario.setNombre("Ana");
+        usuario.setIdUsuario(7);
+        usuario.setEstado(EstadoUsuario.ACTIVO);
         usuario.setIdRol(42);
         Rol rol = new Rol("ADMIN");
         rol.setIdRol(42);
@@ -62,13 +67,19 @@ class LoginControllerTest {
             }
 
             @Override
+            public Usuario revalidarUsuarioActivo(int id) { return usuario; }
+
+            @Override
             public Optional<Rol> buscarRolPorId(int idRol) {
                 assertEquals(42, idRol);
                 return Optional.of(rol);
             }
         };
 
-        var resultado = new LoginController(servicio, new PermisoService())
+        var resultado = new LoginController(new AutenticacionService(servicio, new PermisoService(), id -> true,
+                new AuditService() {
+                    @Override public void registrar(Integer actor, String accion, String entidad, Integer id, String descripcion) { }
+                }))
                 .iniciarSesion("ana", "clave123");
 
         assertTrue(resultado.exito());

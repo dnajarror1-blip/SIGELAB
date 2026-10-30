@@ -49,7 +49,8 @@ def guardar_perfil_facial(
     cantidad_muestras,
     calidad,
     *,
-    conexion=None
+    conexion=None,
+    registrar_auditoria=True
 ):
     """
     Guarda o actualiza un perfil facial cifrado.
@@ -170,32 +171,33 @@ def guardar_perfil_facial(
                 calidad_decimal
             )
 
-        # Registrar auditoría sin fotografías ni embeddings.
-        cursor.execute(
-            """
-            INSERT INTO dbo.AuditoriaFacial (
-                id_usuario,
-                fecha_hora,
-                accion,
-                resultado,
-                score,
-                threshold,
-                detalle,
-                dispositivo
+        if registrar_auditoria:
+            # Registrar auditoría sin fotografías ni embeddings.
+            cursor.execute(
+                """
+                INSERT INTO dbo.AuditoriaFacial (
+                    id_usuario,
+                    fecha_hora,
+                    accion,
+                    resultado,
+                    score,
+                    threshold,
+                    detalle,
+                    dispositivo
+                )
+                VALUES (
+                    ?,
+                    SYSUTCDATETIME(),
+                    'REGISTRO',
+                    'EXITO',
+                    NULL,
+                    NULL,
+                    'Perfil facial registrado',
+                    'SERVICIO_LOCAL'
+                )
+                """,
+                id_usuario
             )
-            VALUES (
-                ?,
-                SYSUTCDATETIME(),
-                'REGISTRO',
-                'EXITO',
-                NULL,
-                NULL,
-                'Perfil facial registrado',
-                'SERVICIO_LOCAL'
-            )
-            """,
-            id_usuario
-        )
 
         if conexion_propia:
             conexion.commit()
@@ -208,6 +210,8 @@ def guardar_perfil_facial(
         raise
 
     finally:
+        if "cursor" in locals():
+            cursor.close()
         if conexion_propia:
             conexion.close()
 
@@ -277,5 +281,7 @@ def obtener_embedding_facial(id_usuario, *, conexion=None):
         return embedding
 
     finally:
+        if "cursor" in locals():
+            cursor.close()
         if conexion_propia:
             conexion.close()

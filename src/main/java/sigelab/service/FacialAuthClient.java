@@ -1,6 +1,13 @@
 package sigelab.service;
 
 import java.io.IOException;
+import com.google.gson.JsonObject;
+import com.google.gson.JsonParser;
+import com.google.gson.Strictness;
+import com.google.gson.stream.JsonReader;
+import com.google.gson.stream.JsonToken;
+import java.io.StringReader;
+import java.util.function.IntConsumer;
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
@@ -8,20 +15,7 @@ import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 
-/**
- * Cliente de comunicación entre SIGELAB Java
- * y el servicio local de reconocimiento facial.
- *
- * IMPORTANTE:
- * - No autentica usuarios.
- * - No valida contraseñas.
- * - No permite iniciar sesión.
- * - No registra ni elimina perfiles.
- * - Solo ejecuta consultas y verificaciones diagnósticas.
- *
- * La autenticación y autorización corresponden
- * al módulo principal de seguridad de SIGELAB.
- */
+/** Frontera HTTP local. Java conserva credenciales, permisos y decisión final de acceso. */
 public final class FacialAuthClient {
 
     private static final String CABECERA_API =
@@ -39,6 +33,14 @@ public final class FacialAuthClient {
     private final HttpClient cliente;
     private final String urlBase;
     private final String claveApi;
+    private final IntConsumer autorizarAdmin;
+
+    public static FacialAuthClient desdeEntorno() {
+        String url = System.getenv("FACIAL_API_URL");
+        return new FacialAuthClient(url == null || url.isBlank() ? "http://127.0.0.1:8765" : url,
+                System.getenv("FACIAL_API_KEY"));
+    }
+
 
     /**
      * Crea un cliente para el servicio facial local.
@@ -54,7 +56,11 @@ public final class FacialAuthClient {
             String urlServicio,
             String claveApi
     ) {
+        this(urlServicio, claveApi, id -> new UsuarioService().exigirAdministradorActivo(id));
+    }
 
+    FacialAuthClient(String urlServicio, String claveApi, IntConsumer autorizarAdmin) {
+        this.autorizarAdmin = autorizarAdmin;
         if (
                 urlServicio == null
                 || urlServicio.isBlank()
@@ -189,18 +195,7 @@ public final class FacialAuthClient {
         );
     }
 
-    /**
-     * Solicita una verificación facial de diagnóstico.
-     *
-     * PRECONDICIÓN:
-     * El backend de SIGELAB debe validar previamente
-     * las credenciales, el estado y la autorización
-     * correspondiente al usuario.
-     *
-     * IMPORTANTE:
-     * La respuesta nunca debe utilizarse para
-     * autorizar directamente un inicio de sesión.
-     */
+    /** Adaptador para el panel diagnóstico. No decide el acceso de Java. */
     public RespuestaFacial verificarDiagnostico(
             int idUsuario
     ) {
@@ -216,6 +211,90 @@ public final class FacialAuthClient {
                 cuerpoJson,
                 true
         );
+    }
+
+    public record Verificacion(int userId, boolean matched, Double score, double threshold,
+                               boolean livenessPassed) { }
+    public record EstadoPerfil(int userId, boolean usuarioExiste, boolean usuarioActivo,
+                               boolean registrado, boolean activo) { }
+    public record Registro(int userId, boolean registered) { }
+    public record Eliminacion(int userId, boolean deleted) { }
+
+    public Verificacion verificar(int idUsuario) {
+        JsonObject json = leerRespuesta(verificarDiagnostico(idUsuario));
+        comprobarUsuario(json, "userId", idUsuario);
+        boolean matched = booleano(json, "matched");
+        boolean live = booleano(json, "livenessPassed");
+        double threshold = numero(json, "threshold");
+        Double score = json.has("score") && !json.get("score").isJsonNull() ? numero(json, "score") : null;
+        if (threshold <= 0 || threshold > 1 || (score != null && (score < -1 || score > 1))
+                || (matched && (!live || score == null || score < threshold))) {
+            throw respuestaInvalida();
+        }
+        return new Verificacion(idUsuario, matched, score, threshold, live);
+    }
+
+    public EstadoPerfil consultarPerfil(int idUsuario) {
+        JsonObject json = leerRespuesta(consultarEstado(idUsuario));
+        comprobarUsuario(json, "id_usuario", idUsuario);
+        return new EstadoPerfil(idUsuario, booleano(json, "usuario_existe"), booleano(json, "usuario_activo"),
+                booleano(json, "perfil_registrado"), booleano(json, "perfil_activo"));
+    }
+
+    /** El actor debe proceder del usuario autenticado, nunca de un campo libre de la View. */
+    public Registro registrar(int idUsuario, int adminUserId, boolean reemplazar) {
+        validarIdUsuario(idUsuario);
+        validarIdUsuario(adminUserId);
+        autorizarAdmin.accept(adminUserId);
+        JsonObject json = leerRespuesta(enviarSolicitud("POST", "/face/enroll",
+                "{\"userId\":" + idUsuario + ",\"adminUserId\":" + adminUserId
+                        + ",\"replace\":" + reemplazar + "}", true));
+        comprobarUsuario(json, "userId", idUsuario);
+        return new Registro(idUsuario, booleano(json, "registered"));
+    }
+
+    public Eliminacion eliminar(int idUsuario, int adminUserId) {
+        validarIdUsuario(idUsuario);
+        validarIdUsuario(adminUserId);
+        autorizarAdmin.accept(adminUserId);
+        JsonObject json = leerRespuesta(enviarSolicitud("DELETE", "/face/profile/" + idUsuario
+                + "?adminUserId=" + adminUserId, null, true));
+        comprobarUsuario(json, "userId", idUsuario);
+        return new Eliminacion(idUsuario, booleano(json, "deleted"));
+    }
+
+    private static JsonObject leerRespuesta(RespuestaFacial respuesta) {
+        if (respuesta.codigoHttp() != 200 || respuesta.cuerpo() == null) throw respuestaInvalida();
+        try (JsonReader reader = new JsonReader(new StringReader(respuesta.cuerpo()))) {
+            reader.setStrictness(Strictness.STRICT);
+            var elemento = JsonParser.parseReader(reader);
+            if (!elemento.isJsonObject() || reader.peek() != JsonToken.END_DOCUMENT) throw respuestaInvalida();
+            return elemento.getAsJsonObject();
+        } catch (IOException | RuntimeException error) {
+            throw respuestaInvalida();
+        }
+    }
+
+    private static boolean booleano(JsonObject json, String campo) {
+        if (!json.has(campo) || !json.get(campo).isJsonPrimitive()
+                || !json.getAsJsonPrimitive(campo).isBoolean()) throw respuestaInvalida();
+        return json.get(campo).getAsBoolean();
+    }
+
+    private static double numero(JsonObject json, String campo) {
+        if (!json.has(campo) || !json.get(campo).isJsonPrimitive()
+                || !json.getAsJsonPrimitive(campo).isNumber()) throw respuestaInvalida();
+        double valor = json.get(campo).getAsDouble();
+        if (!Double.isFinite(valor)) throw respuestaInvalida();
+        return valor;
+    }
+
+    private static void comprobarUsuario(JsonObject json, String campo, int idUsuario) {
+        if (numero(json, campo) != idUsuario) throw respuestaInvalida();
+    }
+
+    private static ErrorComunicacion respuestaInvalida() {
+        return new ErrorComunicacion("Respuesta facial inválida o servicio no disponible", null);
     }
 
     /**
@@ -267,8 +346,9 @@ public final class FacialAuthClient {
                     )
             );
 
+        } else if ("DELETE".equals(metodo)) {
+            solicitud.DELETE();
         } else {
-
             solicitud.GET();
         }
 

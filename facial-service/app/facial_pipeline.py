@@ -18,8 +18,12 @@ from pathlib import Path
 from threading import Lock
 
 import numpy as np
-from insightface.app import FaceAnalysis
+def FaceAnalysis(*args, **kwargs):
+    from insightface.app import FaceAnalysis as factory
+    return factory(*args, **kwargs)
 
+
+from .config import liveness_threshold, model_name
 from .facial_matching import calcular_similitud
 from .perfil_storage import validar_embedding
 
@@ -27,7 +31,7 @@ from .perfil_storage import validar_embedding
 CARPETA_SERVICIO = Path(__file__).resolve().parents[1]
 
 # Umbral inicial pendiente de calibracion.
-UMBRAL_LIVENESS_INICIAL = 0.80
+UMBRAL_LIVENESS_INICIAL = liveness_threshold()
 
 # Protege la carga y el uso del analizador compartido.
 _BLOQUEO_ANALISIS = Lock()
@@ -48,7 +52,7 @@ def _obtener_analizador():
     print("Cargando reconocimiento facial y liveness...")
 
     analizador = FaceAnalysis(
-        name="buffalo_l",
+        name=model_name(),
         root=str(CARPETA_SERVICIO),
         providers=["CPUExecutionProvider"],
         allowed_modules=[

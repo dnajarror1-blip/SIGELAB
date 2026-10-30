@@ -52,6 +52,20 @@ public class UsuarioRepository {
         }
     }
 
+    public Optional<Usuario> buscarPorId(int idUsuario) {
+        String sql = "SELECT id_usuario, nombre, apellido, username, password_hash, correo, id_rol, estado "
+                + "FROM dbo.Usuario WHERE id_usuario = ?";
+        try (Connection con = DatabaseConfig.getConnection();
+             PreparedStatement ps = con.prepareStatement(sql)) {
+            ps.setInt(1, idUsuario);
+            try (ResultSet rs = ps.executeQuery()) {
+                return rs.next() ? Optional.of(mapear(rs)) : Optional.empty();
+            }
+        } catch (SQLException e) {
+            throw new DataAccessException("No se pudo buscar el usuario", e);
+        }
+    }
+
     // Trae todos los usuarios, del más viejo al más nuevo
     public List<Usuario> listarTodos() {
         try (Connection con = DatabaseConfig.getConnection();

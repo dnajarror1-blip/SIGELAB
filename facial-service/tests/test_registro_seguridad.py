@@ -14,6 +14,7 @@ mediante ROLLBACK.
 
 import secrets
 import unittest
+import os
 
 from uuid import uuid4
 
@@ -26,6 +27,7 @@ from app.registro_facial_nuevo import guardar_perfil_nuevo
 BASE_PRUEBAS = "SIGELAB_TEST_FACE"
 
 
+@unittest.skipUnless(os.getenv("SIGELAB_RUN_SQL_TESTS") == "1", "SQL real requiere autorización explícita")
 class TestRegistroSeguridad(unittest.TestCase):
 
     def setUp(self):

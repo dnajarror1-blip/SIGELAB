@@ -6,16 +6,24 @@ import sigelab.service.UsuarioService;
 
 import static org.junit.jupiter.api.Assertions.*;
 
+@org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable(named="SIGELAB_RUN_SQL_TESTS", matches="1")
 class LoginControllerIT {
 
-    private final LoginController controller = new LoginController();
     private final UsuarioService usuarioService = new UsuarioService();
+    // Integración SQL: FaceID simulado explícitamente para no abrir cámara.
+    private final LoginController controller = new LoginController(new sigelab.service.AutenticacionService(
+            usuarioService, new sigelab.service.PermisoService(), id -> true, new sigelab.service.AuditService()));
+
+    private int rol(String nombre) {
+        return usuarioService.listarRoles().stream().filter(r -> nombre.equals(r.getNombre()))
+                .findFirst().orElseThrow().getIdRol();
+    }
 
     @Test
     void adminEntraYVeTodoElMenu() throws Exception {
-        // Creamos un usuario con rol 1 (ADMIN)
+        // Resolvemos ADMIN por su nombre real.
         String username = "test_ctrl_admin_" + System.currentTimeMillis();
-        usuarioService.crearUsuario("Ana", "Admin", username, "clave123", "ana@correo.test", 1);
+        usuarioService.crearUsuario("Ana", "Admin", username, "clave123", "ana@correo.test", rol("ADMIN"));
 
         var resultado = controller.iniciarSesion(username, "clave123");
 
@@ -26,9 +34,9 @@ class LoginControllerIT {
 
     @Test
     void encargadoEntraPeroNoVeUsuarios() throws Exception {
-        // Creamos un usuario con rol 2 (ENCARGADO)
+        // Resolvemos ENCARGADO por su nombre real.
         String username = "test_ctrl_enc_" + System.currentTimeMillis();
-        usuarioService.crearUsuario("Luis", "Encargado", username, "clave123", "luis@correo.test", 2);
+        usuarioService.crearUsuario("Luis", "Encargado", username, "clave123", "luis@correo.test", rol("ENCARGADO"));
 
         var resultado = controller.iniciarSesion(username, "clave123");
 
@@ -40,7 +48,7 @@ class LoginControllerIT {
     @Test
     void contrasenaIncorrectaNoEntra() throws Exception {
         String username = "test_ctrl_mala_" + System.currentTimeMillis();
-        usuarioService.crearUsuario("Luis", "Prueba", username, "clave123", "luis2@correo.test", 2);
+        usuarioService.crearUsuario("Luis", "Prueba", username, "clave123", "luis2@correo.test", rol("ENCARGADO"));
 
         var resultado = controller.iniciarSesion(username, "otra_clave");
 

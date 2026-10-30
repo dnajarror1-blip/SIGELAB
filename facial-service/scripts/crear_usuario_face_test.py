@@ -142,7 +142,7 @@ def crear_usuario():
             ESTADO,
         )
 
-                id_generado = cursor.execute(
+        id_generado = cursor.execute(
             """
             SELECT id_usuario
             FROM dbo.Usuario

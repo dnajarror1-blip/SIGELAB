@@ -3,9 +3,9 @@ package sigelab.controller;
 import sigelab.exception.BusinessException;
 import sigelab.exception.DataAccessException;
 import sigelab.exception.DatabaseConfigurationException;
-import sigelab.model.Rol;
 import sigelab.model.Usuario;
 import sigelab.service.Modulo;
+import sigelab.service.AutenticacionService;
 import sigelab.service.PermisoService;
 import sigelab.service.UsuarioService;
 
@@ -13,16 +13,18 @@ import java.util.Set;
 
 public class LoginController {
 
-    private final UsuarioService usuarioService;
-    private final PermisoService permisoService;
+    private final AutenticacionService autenticacion;
 
     public LoginController() {
         this(new UsuarioService(), new PermisoService());
     }
 
     public LoginController(UsuarioService usuarios, PermisoService permisos) {
-        usuarioService = usuarios;
-        permisoService = permisos;
+        this(new AutenticacionService(usuarios, permisos));
+    }
+
+    public LoginController(AutenticacionService autenticacion) {
+        this.autenticacion = autenticacion;
     }
 
     // Aquí guardamos lo que la pantalla necesita saber después de intentar entrar.
@@ -33,15 +35,9 @@ public class LoginController {
     // La pantalla llama a este método cuando el usuario presiona "Entrar"
     public ResultadoLogin iniciarSesion(String username, String password) {
         try {
-            // Revisamos usuario, contraseña y que esté activo
-            Usuario u = usuarioService.autenticar(username, password);
-
-            // Según su rol, sacamos las opciones del menú que le tocan
-            Rol rol = usuarioService.buscarRolPorId(u.getIdRol())
-                    .orElseThrow(() -> new BusinessException("El usuario no tiene un rol válido"));
-            Set<Modulo> menu = permisoService.modulosDe(rol);
-
-            return new ResultadoLogin(true, "Bienvenido " + u.getNombre(), u, menu, rol.getNombre());
+            var sesion = autenticacion.autenticar(username, password);
+            return new ResultadoLogin(true, "Bienvenido " + sesion.usuario().getNombre(),
+                    sesion.usuario(), sesion.menu(), sesion.nombreRol());
 
         } catch (BusinessException e) {
             // Error de reglas (contraseña mala, usuario inactivo...): se lo mostramos tal cual

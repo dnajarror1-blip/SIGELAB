@@ -117,27 +117,51 @@ public class LoginForm extends JFrame {
     }
 
     private void intentarEntrar() {
-        // Leemos lo que escribió el usuario
+        if (!btnEntrar.isEnabled()) return;
         String username = txtUsuario.getText().trim();
-        String password = new String(txtPassword.getPassword());
-
-        // Se lo pasamos al controller y esperamos su respuesta
-        var resultado = controller.iniciarSesion(username, password);
-
-        if (resultado.exito()) {
-            // Entró bien: abrimos la ventana principal con el menú de su rol
-            // y cerramos el login
-            new MenuPrincipalForm(resultado.usuario(), resultado.menu(), resultado.nombreRol()).setVisible(true);
-            dispose();
-            return;
-        }
-
-        // Si llegamos aquí es porque falló: mostramos el motivo en rojo
-        lblMensaje.setForeground(ERROR);
-        lblMensaje.setText(resultado.mensaje());
-
-        // Por seguridad, borramos la contraseña del campo
+        char[] password = txtPassword.getPassword();
         txtPassword.setText("");
+        btnEntrar.setEnabled(false);
+        txtUsuario.setEnabled(false);
+        txtPassword.setEnabled(false);
+        lblMensaje.setForeground(TEXTO_SUAVE);
+        lblMensaje.setText("Validando credenciales y rostro…");
+        new SwingWorker<LoginController.ResultadoLogin, Void>() {
+            @Override
+            protected LoginController.ResultadoLogin doInBackground() {
+                try {
+                    return controller.iniciarSesion(username, new String(password));
+                } finally {
+                    java.util.Arrays.fill(password, '\0');
+                }
+            }
+
+            @Override
+            protected void done() {
+                try {
+                    var resultado = get();
+                    if (!isDisplayable()) return;
+                    if (resultado.exito()) {
+                        new MenuPrincipalForm(resultado.usuario(), resultado.menu(), resultado.nombreRol()).setVisible(true);
+                        dispose();
+                    } else {
+                        lblMensaje.setForeground(ERROR);
+                        lblMensaje.setText(resultado.mensaje());
+                    }
+                } catch (InterruptedException error) {
+                    Thread.currentThread().interrupt();
+                    lblMensaje.setForeground(ERROR);
+                    lblMensaje.setText("Inicio de sesión interrumpido. Acceso denegado.");
+                } catch (java.util.concurrent.ExecutionException error) {
+                    lblMensaje.setForeground(ERROR);
+                    lblMensaje.setText("No fue posible completar el inicio de sesión.");
+                } finally {
+                    btnEntrar.setEnabled(true);
+                    txtUsuario.setEnabled(true);
+                    txtPassword.setEnabled(true);
+                }
+            }
+        }.execute();
     }
 
     // TEMPORAL: solo para probar la pantalla sola

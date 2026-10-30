@@ -14,6 +14,7 @@ No deja registros de auditoria permanentes.
 """
 
 import unittest
+import os
 from unittest.mock import patch
 
 from app.database import get_connection
@@ -48,6 +49,7 @@ class ConexionSinCommit:
         self.cierres_interceptados += 1
 
 
+@unittest.skipUnless(os.getenv("SIGELAB_RUN_SQL_TESTS") == "1", "SQL real requiere autorización explícita")
 class TestAuditoriaRechazoRollback(unittest.TestCase):
 
     def test_rechazos_con_rollback(self):
@@ -118,7 +120,7 @@ class TestAuditoriaRechazoRollback(unittest.TestCase):
             )
 
             with patch(
-                "app.main.get_connection",
+                "app.administracion_repository.get_connection",
                 return_value=conexion_controlada,
             ):
 

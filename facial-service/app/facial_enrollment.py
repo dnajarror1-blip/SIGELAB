@@ -16,8 +16,13 @@ from time import perf_counter
 
 import cv2
 import numpy as np
-from insightface.app import FaceAnalysis
+def FaceAnalysis(*args, **kwargs):
+    from insightface.app import FaceAnalysis as factory
+    return factory(*args, **kwargs)
 
+
+from .camara import abrir_camara, ErrorCamara
+from .config import capture_timeout, model_name
 from .facial_matching import calcular_similitud
 from .facial_pipeline import UMBRAL_LIVENESS_INICIAL
 from .perfil_storage import validar_embedding
@@ -26,7 +31,7 @@ from .perfil_storage import validar_embedding
 CARPETA_SERVICIO = Path(__file__).resolve().parents[1]
 
 MUESTRAS_REQUERIDAS = 6
-MAX_TIEMPO_CAPTURA_SEG = 120
+MAX_TIEMPO_CAPTURA_SEG = capture_timeout()
 
 POSICIONES = (
     "Mira de frente",
@@ -44,7 +49,7 @@ def cargar_modelo_registro():
     """
 
     analizador = FaceAnalysis(
-        name="buffalo_l",
+        name=model_name(),
         root=str(CARPETA_SERVICIO),
         providers=["CPUExecutionProvider"],
         allowed_modules=[
@@ -290,10 +295,7 @@ def capturar_muestras_registro(analizador):
     Q o ESC cancela sin guardar datos.
     """
 
-    camara = cv2.VideoCapture(
-        0,
-        cv2.CAP_DSHOW
-    )
+    camara = abrir_camara()
 
     if not camara.isOpened():
         camara.release()
@@ -334,7 +336,7 @@ def capturar_muestras_registro(analizador):
             correcto, imagen = camara.read()
 
             if not correcto:
-                raise RuntimeError(
+                raise ErrorCamara(
                     "La camara dejo de entregar imagenes"
                 )
 
@@ -378,6 +380,8 @@ def capturar_muestras_registro(analizador):
             )
 
             tecla = cv2.waitKey(1) & 0xFF
+            if cv2.getWindowProperty("SIGELAB - Preparacion facial", cv2.WND_PROP_VISIBLE) < 1:
+                return None
 
             if tecla in (
                 ord("q"),

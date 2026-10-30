@@ -19,6 +19,7 @@ No modifica usuarios existentes.
 import secrets
 import struct
 import unittest
+import os
 
 from uuid import uuid4
 
@@ -38,6 +39,7 @@ from app.eliminacion_facial_interna import (
 BASE_PRUEBAS = "SIGELAB_TEST_FACE"
 
 
+@unittest.skipUnless(os.getenv("SIGELAB_RUN_SQL_TESTS") == "1", "SQL real requiere autorización explícita")
 class TestEliminacionFacialSqlRollback(
     unittest.TestCase
 ):

@@ -114,7 +114,13 @@ public class UsuarioService {
         Usuario u = encontrado.get();
 
         // Comparamos lo que escribió con el hash guardado
-        if (!BCrypt.checkpw(passwordPlano, u.getPasswordHash())) {
+        boolean passwordValido;
+        try {
+            passwordValido = BCrypt.checkpw(passwordPlano, u.getPasswordHash());
+        } catch (IllegalArgumentException | NullPointerException error) {
+            passwordValido = false;
+        }
+        if (!passwordValido) {
             auditoria.registrar(null, "LOGIN_FALLIDO", "Usuario", null, "Credenciales rechazadas.");
             throw new BusinessException("Usuario o contraseña incorrectos");
         }
@@ -125,10 +131,29 @@ public class UsuarioService {
             throw new BusinessException("El usuario no está activo");
         }
 
-        auditoria.registrar(u.getIdUsuario(), "LOGIN_EXITOSO", "Usuario", u.getIdUsuario(), "Credenciales validadas.");
+        // El éxito pertenece al flujo completo de AutenticacionService, después de FaceID.
 
         // Todo bien, lo dejamos pasar
         return u;
+    }
+
+    /** Reconsulta el estado después de la captura, usando el identificador estable. */
+    public Usuario revalidarUsuarioActivo(int idUsuario) {
+        Usuario actual = usuarioRepository.buscarPorId(idUsuario)
+                .orElseThrow(() -> new BusinessException("El usuario ya no está disponible"));
+        if (actual.getEstado() != EstadoUsuario.ACTIVO) {
+            throw new BusinessException("El usuario no está activo");
+        }
+        return actual;
+    }
+
+    public void exigirAdministradorActivo(int idUsuario) {
+        Usuario actor = revalidarUsuarioActivo(idUsuario);
+        Rol rol = buscarRolPorId(actor.getIdRol())
+                .orElseThrow(() -> new BusinessException("El usuario no tiene un rol válido"));
+        if (!"ADMIN".equals(rol.getNombre())) {
+            throw new BusinessException("Se requiere un administrador activo");
+        }
     }
 
     // Devuelve todos los usuarios para mostrarlos en la tabla

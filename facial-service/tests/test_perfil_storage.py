@@ -8,6 +8,7 @@ No modifica el perfil facial de Wilson.
 import secrets
 import struct
 import unittest
+import os
 from uuid import uuid4
 
 import bcrypt
@@ -19,6 +20,7 @@ from app.perfil_storage import (
 )
 
 
+@unittest.skipUnless(os.getenv("SIGELAB_RUN_SQL_TESTS") == "1", "SQL real requiere autorización explícita")
 class TestPerfilStorage(unittest.TestCase):
 
     def test_almacenamiento_con_rollback(self):
