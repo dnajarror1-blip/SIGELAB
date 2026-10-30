@@ -26,5 +26,6 @@ Thumbs.db
 
 # Datos biométricos locales
 facial-service/models/
+facial-service/addons/
 facial-service/captures/
 facial-service/embeddings/
