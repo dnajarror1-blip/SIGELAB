@@ -52,11 +52,13 @@ public class MantenimientoRepository {
             stmt.setString(8, m.getEstado().name());
             stmt.setString(9, m.getObservaciones());
 
-            stmt.executeUpdate();
+            if (stmt.executeUpdate() != 1) throw new SQLException("No se modificó el mantenimiento.");
 
             try (ResultSet rs = stmt.getGeneratedKeys()) {
                 if (rs.next()) {
                     m.setIdMantenimiento(rs.getInt(1));
+                } else {
+                    throw new SQLException("No se obtuvo el ID del mantenimiento.");
                 }
             }
         }
@@ -71,7 +73,7 @@ public class MantenimientoRepository {
 
     public void actualizar(Mantenimiento m, Connection conn) throws SQLException {
         String sql = "UPDATE dbo.Mantenimiento SET fecha_salida = ?, resultado = ?, estado = ?, observaciones = ? "
-                   + "WHERE id_mantenimiento = ?";
+                   + "WHERE id_mantenimiento = ? AND estado = 'ABIERTO'";
 
         try (PreparedStatement stmt = conn.prepareStatement(sql)) {
             if (m.getFechaSalida() != null) {
@@ -90,7 +92,7 @@ public class MantenimientoRepository {
             stmt.setString(4, m.getObservaciones());
             stmt.setInt(5, m.getIdMantenimiento());
 
-            stmt.executeUpdate();
+            if (stmt.executeUpdate() != 1) throw new SQLException("No se modificó el mantenimiento.");
         }
     }
 
@@ -113,6 +115,16 @@ public class MantenimientoRepository {
             }
         }
         return Optional.empty();
+    }
+
+    public boolean existeAbierto(int idEquipo, Connection conn) throws SQLException {
+        try (PreparedStatement stmt = conn.prepareStatement(
+                "SELECT 1 FROM dbo.Mantenimiento WHERE id_equipo = ? AND estado = 'ABIERTO'")) {
+            stmt.setInt(1, idEquipo);
+            try (ResultSet rs = stmt.executeQuery()) {
+                return rs.next();
+            }
+        }
     }
 
     public List<Mantenimiento> listarTodos() throws SQLException {

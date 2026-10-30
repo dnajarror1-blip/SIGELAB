@@ -102,17 +102,18 @@ public class UsuarioRepository {
     // Cambia un usuario a ACTIVO o INACTIVO.
     // Devuelve true si encontró al usuario y lo cambió
     public boolean cambiarEstado(int idUsuario, EstadoUsuario nuevoEstado) {
-        try (Connection con = DatabaseConfig.getConnection();
-             PreparedStatement ps = con.prepareStatement(SQL_CAMBIAR_ESTADO)) {
-
-            ps.setString(1, nuevoEstado.name());
-            ps.setInt(2, idUsuario);
-
-            // executeUpdate nos dice a cuántas filas afectó
-            return ps.executeUpdate() > 0;
-
+        try (Connection con = DatabaseConfig.getConnection()) {
+            return cambiarEstado(idUsuario, nuevoEstado, con);
         } catch (SQLException e) {
             throw new DataAccessException("No se pudo cambiar el estado del usuario", e);
+        }
+    }
+
+    public boolean cambiarEstado(int idUsuario, EstadoUsuario nuevoEstado, Connection con) throws SQLException {
+        try (PreparedStatement ps = con.prepareStatement(SQL_CAMBIAR_ESTADO)) {
+            ps.setString(1, nuevoEstado.name());
+            ps.setInt(2, idUsuario);
+            return ps.executeUpdate() == 1;
         }
     }
 

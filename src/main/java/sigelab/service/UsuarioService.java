@@ -8,6 +8,10 @@ import sigelab.model.Usuario;
 import sigelab.repository.RolRepository;
 import sigelab.repository.UsuarioRepository;
 
+import java.sql.Connection;
+import java.sql.SQLException;
+import sigelab.config.DatabaseConfig;
+import sigelab.exception.DataAccessException;
 import java.util.List;
 import java.util.Optional;
 
@@ -17,11 +21,23 @@ public class UsuarioService {
     private final UsuarioRepository usuarioRepository;
     private final RolRepository rolRepository;
 
+    private final AuditService auditoria;
+    private final ConexionUsuario conexiones;
+
+    @FunctionalInterface
+    interface ConexionUsuario { Connection abrir() throws SQLException; }
+
     public UsuarioService() {
         this(new UsuarioRepository(), new RolRepository());
     }
 
     public UsuarioService(UsuarioRepository usuarios, RolRepository roles) {
+        this(usuarios, roles, new AuditService(), DatabaseConfig::getConnection);
+    }
+
+    UsuarioService(UsuarioRepository usuarios, RolRepository roles, AuditService auditoria, ConexionUsuario conexiones) {
+        this.auditoria = auditoria;
+        this.conexiones = conexiones;
         this.usuarioRepository = usuarios;
         this.rolRepository = roles;
     }
@@ -82,6 +98,7 @@ public class UsuarioService {
 
         // Si no escribieron nada, ni vale la pena ir a la base
         if (username == null || username.isBlank() || passwordPlano == null) {
+            auditoria.registrar(null, "LOGIN_FALLIDO", "Usuario", null, "Credenciales rechazadas.");
             throw new BusinessException("Usuario o contraseña incorrectos");
         }
 
@@ -91,19 +108,24 @@ public class UsuarioService {
         // Si no existe, damos el mismo mensaje que con contraseña mala,
         // así nadie puede adivinar qué usernames existen
         if (encontrado.isEmpty()) {
+            auditoria.registrar(null, "LOGIN_FALLIDO", "Usuario", null, "Credenciales rechazadas.");
             throw new BusinessException("Usuario o contraseña incorrectos");
         }
         Usuario u = encontrado.get();
 
         // Comparamos lo que escribió con el hash guardado
         if (!BCrypt.checkpw(passwordPlano, u.getPasswordHash())) {
+            auditoria.registrar(null, "LOGIN_FALLIDO", "Usuario", null, "Credenciales rechazadas.");
             throw new BusinessException("Usuario o contraseña incorrectos");
         }
 
         // Aunque la contraseña esté bien, un usuario que no está activo no entra
         if (u.getEstado() != EstadoUsuario.ACTIVO) {
+            auditoria.registrar(u.getIdUsuario(), "LOGIN_FALLIDO", "Usuario", u.getIdUsuario(), "Acceso rechazado: usuario inactivo.");
             throw new BusinessException("El usuario no está activo");
         }
+
+        auditoria.registrar(u.getIdUsuario(), "LOGIN_EXITOSO", "Usuario", u.getIdUsuario(), "Credenciales validadas.");
 
         // Todo bien, lo dejamos pasar
         return u;
@@ -123,10 +145,27 @@ public class UsuarioService {
             throw new BusinessException("No puedes desactivar tu propio usuario");
         }
 
-        // Si el repositorio no encontró ese id, avisamos
-        boolean cambiado = usuarioRepository.cambiarEstado(idUsuario, nuevoEstado);
-        if (!cambiado) {
-            throw new BusinessException("No se encontró el usuario");
+        if (idUsuario <= 0 || idQuienLoHace <= 0 || nuevoEstado == null) {
+            throw new BusinessException("Debe indicar usuario, actor y estado válidos.");
+        }
+        try (Connection conn = conexiones.abrir()) {
+            conn.setAutoCommit(false);
+            try {
+                auditoria.validarAcceso(conn, idQuienLoHace, Modulo.USUARIOS);
+                if (!usuarioRepository.cambiarEstado(idUsuario, nuevoEstado, conn)) {
+                    throw new BusinessException("No se encontró el usuario");
+                }
+                auditoria.registrar(idQuienLoHace,
+                        nuevoEstado == EstadoUsuario.INACTIVO ? "USUARIO_DESACTIVADO" : "USUARIO_ACTIVADO",
+                        "Usuario", idUsuario, "Cambio de estado a " + nuevoEstado, conn);
+                conn.commit();
+            } catch (SQLException | RuntimeException e) {
+                try { conn.rollback(); } catch (SQLException rollback) { e.addSuppressed(rollback); }
+                if (e instanceof BusinessException negocio) throw negocio;
+                throw new DataAccessException("No se pudo actualizar el estado del usuario.", e);
+            }
+        } catch (SQLException e) {
+            throw new DataAccessException("No se pudo conectar para actualizar el usuario.", e);
         }
     }
 

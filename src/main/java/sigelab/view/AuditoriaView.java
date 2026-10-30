@@ -15,10 +15,11 @@ import javax.swing.ListSelectionModel;
 import javax.swing.table.DefaultTableModel;
 import sigelab.model.Auditoria;
 import sigelab.service.AuditService;
+import sigelab.controller.AuditoriaController;
 
 public class AuditoriaView extends JPanel {
 
-    private final AuditService auditoriaService;
+    private final AuditoriaController auditoriaService;
 
     private JTable tablaAuditoria;
     private DefaultTableModel modeloTabla;
@@ -32,7 +33,19 @@ public class AuditoriaView extends JPanel {
     }
 
     public AuditoriaView(AuditService auditoriaService) {
-        this.auditoriaService = auditoriaService;
+        this(auditoriaService, null);
+    }
+
+    public AuditoriaView(int idUsuario) {
+        this(new AuditService(), idUsuario);
+    }
+
+    public AuditoriaView(AuditService auditoriaService, Integer idUsuario) {
+        this(new AuditoriaController(auditoriaService, idUsuario));
+    }
+
+    AuditoriaView(AuditoriaController controller) {
+        this.auditoriaService = controller;
         initComponents();
         cargarDatos();
     }
@@ -88,45 +101,30 @@ public class AuditoriaView extends JPanel {
     }
 
     public void cargarDatos() {
-        modeloTabla.setRowCount(0);
-        try {
-            List<Auditoria> lista = auditoriaService.obtenerHistorial();
-            for (Auditoria a : lista) {
-                modeloTabla.addRow(new Object[]{
-                    a.getIdAuditoria(),
-                    a.getIdUsuario() != null ? a.getIdUsuario() : "(Sin usuario)",
-                    a.getFechaHora(),
-                    a.getAccion(),
-                    a.getEntidad(),
-                    a.getIdRegistro() != null ? a.getIdRegistro() : "-",
-                    a.getDescripcion()
-                });
-            }
-        } catch (Exception ex) {
-            JOptionPane.showMessageDialog(this, "Error al consultar bitácora: " + ex.getMessage(), "Error", JOptionPane.ERROR_MESSAGE);
-        }
+        consultar(false);
     }
 
     private void filtrarDatos() {
-        modeloTabla.setRowCount(0);
-        try {
-            String accion = txtFiltroAccion.getText().trim();
-            String entidad = txtFiltroEntidad.getText().trim();
+        consultar(true);
+    }
 
-            List<Auditoria> lista = auditoriaService.filtrarHistorial(accion, entidad, null);
+    private void consultar(boolean filtrar) {
+        if (!btnFiltrar.isEnabled()) return;
+        String accion = txtFiltroAccion.getText().trim();
+        String entidad = txtFiltroEntidad.getText().trim();
+        btnFiltrar.setEnabled(false);
+        btnLimpiar.setEnabled(false);
+        OperacionModulo.ejecutar(this, () -> filtrar
+                ? auditoriaService.filtrarHistorial(accion, entidad)
+                : auditoriaService.obtenerHistorial(), lista -> {
+            modeloTabla.setRowCount(0);
             for (Auditoria a : lista) {
-                modeloTabla.addRow(new Object[]{
-                    a.getIdAuditoria(),
-                    a.getIdUsuario() != null ? a.getIdUsuario() : "(Sin usuario)",
-                    a.getFechaHora(),
-                    a.getAccion(),
-                    a.getEntidad(),
-                    a.getIdRegistro() != null ? a.getIdRegistro() : "-",
-                    a.getDescripcion()
-                });
+                modeloTabla.addRow(new Object[]{a.getIdAuditoria(), a.getIdUsuario(),
+                        a.getFechaHora(), a.getAccion(), a.getEntidad(), a.getIdRegistro(), a.getDescripcion()});
             }
-        } catch (Exception ex) {
-            JOptionPane.showMessageDialog(this, "Error al filtrar bitácora: " + ex.getMessage(), "Error", JOptionPane.ERROR_MESSAGE);
-        }
+        }, () -> {
+            btnFiltrar.setEnabled(true);
+            btnLimpiar.setEnabled(true);
+        });
     }
 }

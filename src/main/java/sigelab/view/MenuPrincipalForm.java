@@ -79,6 +79,12 @@ public class MenuPrincipalForm extends JFrame {
             agregarOpcion(lateral, "Préstamos",
                     () -> cambiarContenido(new PrestamoView(usuario.getIdUsuario())));
         }
+        if (menu.contains(Modulo.MANTENIMIENTO)) {
+            agregarOpcion(lateral, "Mantenimiento", () -> cambiarContenido(new MantenimientoView(usuario.getIdUsuario())));
+        }
+        if (menu.contains(Modulo.AUDITORIA)) {
+            agregarOpcion(lateral, "Auditoría", () -> cambiarContenido(new AuditoriaView(usuario.getIdUsuario())));
+        }
         if (menu.contains(Modulo.REPORTES_QR)) {
             agregarOpcion(lateral, "Inicio", () -> cambiarContenido(crearInicio(menu)));
             agregarOpcion(lateral, "QR", () -> cambiarContenido(new QrView(usuario)));

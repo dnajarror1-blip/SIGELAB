@@ -1,7 +1,6 @@
 package sigelab.view;
 
 import java.awt.BorderLayout;
-import java.awt.Dimension;
 import java.awt.FlowLayout;
 import java.awt.Frame;
 import java.awt.GridBagConstraints;
@@ -26,11 +25,12 @@ import sigelab.enums.ResultadoMantenimiento;
 import sigelab.enums.TipoMantenimiento;
 import sigelab.model.Mantenimiento;
 import sigelab.service.MantenimientoService;
+import sigelab.service.AuditService;
+import sigelab.controller.MantenimientoController;
 
 public class MantenimientoView extends JPanel {
 
-    private final MantenimientoService mantenimientoService;
-    private final int idUsuarioActual;
+    private final MantenimientoController mantenimientoService;
 
     private JTable tablaMantenimientos;
     private DefaultTableModel modeloTabla;
@@ -44,8 +44,11 @@ public class MantenimientoView extends JPanel {
     }
 
     public MantenimientoView(MantenimientoService mantenimientoService, int idUsuarioActual) {
-        this.mantenimientoService = mantenimientoService;
-        this.idUsuarioActual = idUsuarioActual;
+        this(new MantenimientoController(mantenimientoService, new AuditService(), idUsuarioActual));
+    }
+
+    MantenimientoView(MantenimientoController controller) {
+        this.mantenimientoService = controller;
         initComponents();
         cargarDatos();
     }
@@ -103,38 +106,26 @@ public class MantenimientoView extends JPanel {
     }
 
     public void cargarDatos() {
-        modeloTabla.setRowCount(0);
-        try {
-            int filtroIndex = comboFiltroEstado.getSelectedIndex();
-            List<Mantenimiento> lista;
-
-            if (filtroIndex == 1) {
-                lista = mantenimientoService.listarMantenimientosActivos();
-            } else if (filtroIndex == 2) {
-                lista = mantenimientoService.listarTodos().stream()
-                        .filter(m -> m.getEstado() == EstadoMantenimiento.CERRADO)
-                        .toList();
-            } else {
-                lista = mantenimientoService.listarTodos();
-            }
-
+        if (!btnRefrescar.isEnabled()) return;
+        int filtroIndex = comboFiltroEstado.getSelectedIndex();
+        btnRefrescar.setEnabled(false);
+        comboFiltroEstado.setEnabled(false);
+        OperacionModulo.ejecutar(this, () -> {
+            if (filtroIndex == 1) return mantenimientoService.listarMantenimientosActivos();
+            List<Mantenimiento> lista = mantenimientoService.listarTodos();
+            return filtroIndex == 2 ? lista.stream()
+                    .filter(m -> m.getEstado() == EstadoMantenimiento.CERRADO).toList() : lista;
+        }, lista -> {
+            modeloTabla.setRowCount(0);
             for (Mantenimiento m : lista) {
-                modeloTabla.addRow(new Object[]{
-                    m.getIdMantenimiento(),
-                    m.getIdEquipo(),
-                    m.getFechaIngreso(),
-                    m.getTipo(),
-                    m.getDescripcion(),
-                    m.getIdResponsable(),
-                    m.getFechaSalida() != null ? m.getFechaSalida() : "-",
-                    m.getResultado() != null ? m.getResultado() : "-",
-                    m.getEstado(),
-                    m.getObservaciones()
-                });
+                modeloTabla.addRow(new Object[]{m.getIdMantenimiento(), m.getIdEquipo(),
+                        m.getFechaIngreso(), m.getTipo(), m.getDescripcion(), m.getIdResponsable(),
+                        m.getFechaSalida(), m.getResultado(), m.getEstado(), m.getObservaciones()});
             }
-        } catch (Exception ex) {
-            JOptionPane.showMessageDialog(this, "Error al cargar datos de mantenimiento: " + ex.getMessage(), "Error", JOptionPane.ERROR_MESSAGE);
-        }
+        }, () -> {
+            btnRefrescar.setEnabled(true);
+            comboFiltroEstado.setEnabled(true);
+        });
     }
 
     private void mostrarDialogoIngreso() {
@@ -188,10 +179,13 @@ public class MantenimientoView extends JPanel {
                 String desc = txtDescripcion.getText().trim();
                 String obs = txtObservaciones.getText().trim();
 
-                mantenimientoService.ingresarATaller(idEquipo, tipo, idUsuarioActual, desc, obs);
-                JOptionPane.showMessageDialog(dialog, "Equipo ingresado exitosamente al taller.", "Éxito", JOptionPane.INFORMATION_MESSAGE);
-                dialog.dispose();
-                cargarDatos();
+                btnGuardar.setEnabled(false);
+                OperacionModulo.ejecutar(dialog,
+                        () -> mantenimientoService.ingresarATaller(idEquipo, tipo, desc, obs), guardado -> {
+                    JOptionPane.showMessageDialog(dialog, "Equipo ingresado exitosamente al taller.", "Éxito", JOptionPane.INFORMATION_MESSAGE);
+                    dialog.dispose();
+                    cargarDatos();
+                }, () -> btnGuardar.setEnabled(true));
             } catch (NumberFormatException nfe) {
                 JOptionPane.showMessageDialog(dialog, "El ID de equipo debe ser un número entero.", "Validación", JOptionPane.WARNING_MESSAGE);
             } catch (Exception ex) {
@@ -259,10 +253,15 @@ public class MantenimientoView extends JPanel {
                 ResultadoMantenimiento resultado = (ResultadoMantenimiento) comboResultado.getSelectedItem();
                 String obs = txtObservacionesFinales.getText().trim();
 
-                mantenimientoService.finalizarMantenimiento(idMantenimiento, resultado, obs, idUsuarioActual);
-                JOptionPane.showMessageDialog(dialog, "Mantenimiento finalizado exitosamente.", "Éxito", JOptionPane.INFORMATION_MESSAGE);
-                dialog.dispose();
-                cargarDatos();
+                btnGuardar.setEnabled(false);
+                OperacionModulo.ejecutar(dialog, () -> {
+                    mantenimientoService.finalizarMantenimiento(idMantenimiento, resultado, obs);
+                    return null;
+                }, ignorado -> {
+                    JOptionPane.showMessageDialog(dialog, "Mantenimiento finalizado exitosamente.", "Éxito", JOptionPane.INFORMATION_MESSAGE);
+                    dialog.dispose();
+                    cargarDatos();
+                }, () -> btnGuardar.setEnabled(true));
             } catch (Exception ex) {
                 JOptionPane.showMessageDialog(dialog, ex.getMessage(), "Error al finalizar", JOptionPane.ERROR_MESSAGE);
             }

@@ -1,34 +1,35 @@
 package sigelab.service;
 
-import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
-
+import sigelab.model.Auditoria;
+import sigelab.repository.AuditoriaRepository;
+import sigelab.exception.DataAccessException;
+import java.sql.SQLException;
 import static org.junit.jupiter.api.Assertions.*;
 
 class AuditoriaServiceTest {
-
-    private AuditService auditoriaService;
-
-    @BeforeEach
-    void setUp() {
-        auditoriaService = new AuditService();
+    @Test void registroNoCriticoToleraFalloSinBaseReal() {
+        AuditService service = new AuditService(new AuditoriaRepository() {
+            public void guardar(Auditoria a) throws SQLException { throw new SQLException("Simulado"); }
+        });
+        assertDoesNotThrow(() -> service.registrar(null, "LOGIN_FALLIDO", "Usuario", null, "Credenciales rechazadas"));
     }
-
-    @Test
-    @DisplayName("Debe manejar fallos de persistencia de forma no bloqueante (RN-18)")
-    void debeEjecutarRegistroSinLanzarExcepcionBloqueante() {
-        // Al no haber conexión activa en prueba unitaria pura, no debe tumbar la ejecución
-        assertDoesNotThrow(() ->
-            auditoriaService.registrar(1, "LOGIN_TEST", "Usuario", 1, "Prueba no bloqueante")
-        );
+    @Test void permiteUsuarioNuloYRegistraFechaReferenciaDescripcion() {
+        AuditService service = new AuditService(new AuditoriaRepository() {
+            public void guardar(Auditoria a) {
+                assertNull(a.getIdUsuario()); assertNotNull(a.getFechaHora());
+                assertEquals("LOGIN_FALLIDO", a.getAccion()); assertEquals("Usuario", a.getEntidad());
+                assertNull(a.getIdRegistro()); assertEquals("Credenciales rechazadas", a.getDescripcion());
+            }
+        });
+        service.registrar(null, "LOGIN_FALLIDO", "Usuario", null, "Credenciales rechazadas");
     }
-
-    @Test
-    @DisplayName("Debe manejar usuario nulo sin excepción (CP-02)")
-    void debePermitirRegistroConUsuarioNulo() {
-        assertDoesNotThrow(() ->
-            auditoriaService.registrar(null, "LOGIN_FALLIDO", "Seguridad", null, "Intento no autenticado")
-        );
+    @Test void falloConsultaNoPareceHistorialVacio() {
+        AuditService service = new AuditService(new AuditoriaRepository() {
+            public java.util.List<Auditoria> listarTodos() throws SQLException { throw new SQLException("Privado"); }
+            public java.util.List<Auditoria> buscarPorFiltros(String a, String e, Integer u) throws SQLException { throw new SQLException("Privado"); }
+        });
+        assertThrows(DataAccessException.class, service::obtenerHistorial);
+        assertThrows(DataAccessException.class, () -> service.filtrarHistorial(null, null, null));
     }
 }

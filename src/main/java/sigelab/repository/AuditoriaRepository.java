@@ -15,6 +15,18 @@ import sigelab.model.Auditoria;
 
 public class AuditoriaRepository {
 
+    public java.util.Optional<sigelab.model.Rol> buscarRolUsuarioActivo(Connection conn, int idUsuario) throws SQLException {
+        try (PreparedStatement stmt = conn.prepareStatement(
+                "SELECT r.nombre FROM dbo.Usuario u JOIN dbo.Rol r ON r.id_rol = u.id_rol "
+                + "WHERE u.id_usuario = ? AND u.estado = 'ACTIVO'")) {
+            stmt.setInt(1, idUsuario);
+            try (ResultSet rs = stmt.executeQuery()) {
+                return rs.next() ? java.util.Optional.of(new sigelab.model.Rol(rs.getString(1)))
+                        : java.util.Optional.empty();
+            }
+        }
+    }
+
     public void guardar(Auditoria auditoria) throws SQLException {
         try (Connection conn = DatabaseConfig.getConnection()) {
             guardar(auditoria, conn);
@@ -45,7 +57,7 @@ public class AuditoriaRepository {
 
             stmt.setString(6, auditoria.getDescripcion());
 
-            stmt.executeUpdate();
+            if (stmt.executeUpdate() != 1) throw new SQLException("No se registró el evento de auditoría.");
 
             try (ResultSet rs = stmt.getGeneratedKeys()) {
                 if (rs.next()) {
