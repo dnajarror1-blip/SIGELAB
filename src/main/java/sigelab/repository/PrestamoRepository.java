@@ -18,6 +18,42 @@ import java.util.List;
 
 public class PrestamoRepository {
 
+    /** Serializa devoluciones del mismo encabezado, incluidas las parciales. */
+    public Optional<Prestamo> buscarParaDevolucion(Connection conn, int idPrestamo) throws SQLException {
+        String sql = """
+                SELECT id_prestamo, id_usuario_solicitante, id_usuario_registra,
+                       fecha_prestamo, fecha_esperada_devolucion, estado, observaciones
+                FROM dbo.Prestamo WITH (UPDLOCK, HOLDLOCK) WHERE id_prestamo = ?
+                """;
+        try (PreparedStatement stmt = conn.prepareStatement(sql)) {
+            stmt.setInt(1, idPrestamo);
+            try (ResultSet rs = stmt.executeQuery()) {
+                if (!rs.next()) return Optional.empty();
+                Prestamo p = new Prestamo(rs.getInt("id_usuario_solicitante"),
+                        rs.getInt("id_usuario_registra"), rs.getDate("fecha_prestamo").toLocalDate(),
+                        rs.getDate("fecha_esperada_devolucion").toLocalDate(),
+                        EstadoPrestamo.valueOf(rs.getString("estado")), rs.getString("observaciones"));
+                p.setIdPrestamo(rs.getInt("id_prestamo"));
+                return Optional.of(p);
+            }
+        }
+    }
+
+    public void finalizarSinPendientes(Connection conn, int idPrestamo) throws SQLException {
+        String sql = """
+                UPDATE p SET estado = 'FINALIZADO' FROM dbo.Prestamo p
+                WHERE p.id_prestamo = ? AND p.estado = 'ACTIVO'
+                  AND NOT EXISTS (
+                    SELECT 1 FROM dbo.DetallePrestamo dp WHERE dp.id_prestamo = p.id_prestamo
+                      AND NOT EXISTS (SELECT 1 FROM dbo.Devolucion d
+                                      WHERE d.id_detalle_prestamo = dp.id_detalle_prestamo))
+                """;
+        try (PreparedStatement stmt = conn.prepareStatement(sql)) {
+            stmt.setInt(1, idPrestamo);
+            if (stmt.executeUpdate() != 1) throw new SQLException("No se pudo finalizar el préstamo.");
+        }
+    }
+
     /** Consulta mínima de los participantes usando la conexión del préstamo. */
     public Optional<Rol> buscarRolDeUsuarioActivo(Connection conn, int idUsuario) {
         String sql = """

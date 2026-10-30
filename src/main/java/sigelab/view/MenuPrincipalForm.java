@@ -78,6 +78,10 @@ public class MenuPrincipalForm extends JFrame {
         if (menu.contains(Modulo.RESERVAS_PRESTAMOS)) {
             agregarOpcion(lateral, "Préstamos",
                     () -> cambiarContenido(new PrestamoView(usuario.getIdUsuario())));
+            agregarOpcion(lateral, "Devoluciones",
+                    () -> cambiarContenido(new DevolucionView(usuario.getIdUsuario())));
+            agregarOpcion(lateral, "Reservas",
+                    () -> cambiarContenido(new ReservaView(usuario.getIdUsuario())));
         }
         if (menu.contains(Modulo.MANTENIMIENTO)) {
             agregarOpcion(lateral, "Mantenimiento", () -> cambiarContenido(new MantenimientoView(usuario.getIdUsuario())));

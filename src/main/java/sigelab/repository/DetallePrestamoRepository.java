@@ -13,6 +13,40 @@ import sigelab.config.DatabaseConfig;
 
 public class DetallePrestamoRepository {
 
+    public java.util.Optional<DetallePrestamo> buscarPorId(Connection conn, int idDetalle) throws SQLException {
+        String sql = "SELECT id_detalle_prestamo, id_prestamo, id_equipo FROM dbo.DetallePrestamo WHERE id_detalle_prestamo = ?";
+        try (PreparedStatement stmt = conn.prepareStatement(sql)) {
+            stmt.setInt(1, idDetalle);
+            try (ResultSet rs = stmt.executeQuery()) {
+                return rs.next() ? java.util.Optional.of(mapear(rs)) : java.util.Optional.empty();
+            }
+        }
+    }
+
+    public List<DetallePrestamo> buscarPendientes(Connection conn, int idPrestamo) throws SQLException {
+        String sql = """
+                SELECT dp.id_detalle_prestamo, dp.id_prestamo, dp.id_equipo
+                FROM dbo.DetallePrestamo dp WHERE dp.id_prestamo = ?
+                  AND NOT EXISTS (SELECT 1 FROM dbo.Devolucion d
+                                  WHERE d.id_detalle_prestamo = dp.id_detalle_prestamo)
+                ORDER BY dp.id_equipo, dp.id_detalle_prestamo
+                """;
+        List<DetallePrestamo> lista = new ArrayList<>();
+        try (PreparedStatement stmt = conn.prepareStatement(sql)) {
+            stmt.setInt(1, idPrestamo);
+            try (ResultSet rs = stmt.executeQuery()) {
+                while (rs.next()) lista.add(mapear(rs));
+            }
+        }
+        return lista;
+    }
+
+    private DetallePrestamo mapear(ResultSet rs) throws SQLException {
+        DetallePrestamo d = new DetallePrestamo(rs.getInt("id_prestamo"), rs.getInt("id_equipo"));
+        d.setIdDetallePrestamo(rs.getInt("id_detalle_prestamo"));
+        return d;
+    }
+
     public void guardar(
             Connection connection,
             DetallePrestamo detalle

@@ -18,6 +18,18 @@ public class PermisoService {
         this.rolRepository = rolRepository;
     }
 
+    /** Revalida identidad activa y permisos dentro de la conexión del servicio llamante. */
+    public void validarAcceso(java.sql.Connection conn, int idUsuario, Modulo modulo)
+            throws java.sql.SQLException {
+        if (idUsuario <= 0) throw new sigelab.exception.BusinessException("Debe iniciar sesión.");
+        Rol rol = rolRepository.buscarDeUsuarioActivo(conn, idUsuario)
+                .orElseThrow(() -> new sigelab.exception.BusinessException(
+                        "El usuario no existe o está inactivo."));
+        if (!modulosDe(rol).contains(modulo)) {
+            throw new sigelab.exception.BusinessException("No tiene permiso para acceder a " + modulo + ".");
+        }
+    }
+
     // Dice si un rol puede entrar a una opción del menú
     public boolean puedeAcceder(int idRol, Modulo modulo) {
         return modulosDe(idRol).contains(modulo);

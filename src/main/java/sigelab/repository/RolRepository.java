@@ -14,6 +14,25 @@ import java.util.Optional;
 
 public class RolRepository {
 
+    /** Consulta mínima del actor sin cargar credenciales y con la conexión de la operación. */
+    public java.util.Optional<Rol> buscarDeUsuarioActivo(java.sql.Connection conn, int idUsuario)
+            throws java.sql.SQLException {
+        String sql = """
+                SELECT r.id_rol, r.nombre
+                FROM dbo.Usuario u JOIN dbo.Rol r ON r.id_rol = u.id_rol
+                WHERE u.id_usuario = ? AND u.estado = 'ACTIVO'
+                """;
+        try (var stmt = conn.prepareStatement(sql)) {
+            stmt.setInt(1, idUsuario);
+            try (var rs = stmt.executeQuery()) {
+                if (!rs.next()) return java.util.Optional.empty();
+                Rol rol = new Rol(rs.getString("nombre"));
+                rol.setIdRol(rs.getInt("id_rol"));
+                return java.util.Optional.of(rol);
+            }
+        }
+    }
+
     public Optional<Rol> buscarPorId(int idRol) {
         String sql = "SELECT id_rol, nombre FROM dbo.Rol WHERE id_rol = ?";
         try (Connection con = DatabaseConfig.getConnection();
