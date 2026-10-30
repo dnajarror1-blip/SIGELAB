@@ -81,7 +81,7 @@ public class PrestamoView extends JPanel {
             };
 
     public PrestamoView(int idUsuarioActual) {
-        this(new PrestamoController(), idUsuarioActual);
+        this(new PrestamoController(idUsuarioActual), idUsuarioActual);
     }
 
     public PrestamoView(

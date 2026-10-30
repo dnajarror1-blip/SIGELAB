@@ -75,6 +75,10 @@ public class MenuPrincipalForm extends JFrame {
         if (administrarCatalogos || menu.contains(Modulo.CONSULTA_EQUIPOS)) {
             agregarOpcion(lateral, "Equipos", () -> abrirModulo(new EquipoView(!administrarCatalogos)));
         }
+        if (menu.contains(Modulo.RESERVAS_PRESTAMOS)) {
+            agregarOpcion(lateral, "Préstamos",
+                    () -> cambiarContenido(new PrestamoView(usuario.getIdUsuario())));
+        }
         if (menu.contains(Modulo.REPORTES_QR)) {
             agregarOpcion(lateral, "Inicio", () -> cambiarContenido(crearInicio(menu)));
             agregarOpcion(lateral, "QR", () -> cambiarContenido(new QrView(usuario)));

@@ -1,5 +1,7 @@
 package sigelab.service;
 import java.sql.SQLException;
+import java.io.File;
+import sigelab.model.Rol;
 
 import java.sql.Connection;
 import java.util.ArrayList;
@@ -25,20 +27,56 @@ public class PrestamoService {
 
     private final EquipoRepository equipoRepository;
 
-    private final PrestamoRepository prestamoRepository =
-            new PrestamoRepository();
-
-    private final DetallePrestamoRepository detallePrestamoRepository =
-            new DetallePrestamoRepository();
-
-    private final AuditService auditService = new AuditService();
+    private final PrestamoRepository prestamoRepository;
+    private final DetallePrestamoRepository detallePrestamoRepository;
+    private final AuditService auditService;
+    private final ConexionPrestamo conexiones;
+    private final QrEquipoService qrEquipos;
 
     public PrestamoService() {
         this(new EquipoRepository());
     }
 
     public PrestamoService(EquipoRepository equipoRepository) {
-        this.equipoRepository = equipoRepository;
+        this(equipoRepository, new PrestamoRepository(), new DetallePrestamoRepository(),
+                new AuditService(), DatabaseConfig::getConnection,
+                new QrEquipoService(new sigelab.integration.qr.QrService(),
+                        equipoRepository::buscarPorCodigoInventario));
+    }
+
+    // Permite probar la operación completa sin abrir conexiones reales.
+    PrestamoService(EquipoRepository equipos, PrestamoRepository prestamos,
+            DetallePrestamoRepository detalles, AuditService auditoria,
+            ConexionPrestamo conexiones, QrEquipoService qrEquipos) {
+        this.equipoRepository = equipos;
+        this.prestamoRepository = prestamos;
+        this.detallePrestamoRepository = detalles;
+        this.auditService = auditoria;
+        this.conexiones = conexiones;
+        this.qrEquipos = qrEquipos;
+    }
+
+    @FunctionalInterface
+    interface ConexionPrestamo {
+        Connection abrir() throws SQLException;
+    }
+
+    public void validarUsuarioOperador(int idUsuario) {
+        try (Connection conn = conexiones.abrir()) {
+            validarUsuario(conn, idUsuario, true);
+        } catch (SQLException e) {
+            throw new DataAccessException("No se pudo verificar el usuario que registra.", e);
+        }
+    }
+
+    private void validarUsuario(Connection conn, int idUsuario, boolean operador) {
+        Rol rol = prestamoRepository.buscarRolDeUsuarioActivo(conn, idUsuario)
+                .orElseThrow(() -> new BusinessException(operador
+                        ? "El usuario que registra no existe o está inactivo."
+                        : "El solicitante no existe o está inactivo."));
+        if (operador && !new PermisoService().modulosDe(rol).contains(Modulo.RESERVAS_PRESTAMOS)) {
+            throw new BusinessException("No tienes permiso para gestionar préstamos.");
+        }
     }
 
     public void validarEquipoParaPrestamo(int idEquipo) {
@@ -87,11 +125,14 @@ public class PrestamoService {
 
         int idPrestamo;
 
-        try (Connection conn = DatabaseConfig.getConnection()) {
+        try (Connection conn = conexiones.abrir()) {
             conn.setTransactionIsolation(Connection.TRANSACTION_SERIALIZABLE);
             conn.setAutoCommit(false);
 
             try {
+                validarUsuario(conn, nuevo.getIdUsuarioSolicitante(), false);
+                validarUsuario(conn, nuevo.getIdUsuarioRegistra(), true);
+
                 // Revalidamos dentro de la transacción.
                 for (Integer idEquipo : equiposOrdenados) {
                     Equipo equipo = equipoRepository
@@ -203,6 +244,13 @@ public class PrestamoService {
             );
         }
 
+        if (prestamo.getFechaPrestamo().getYear() < 1
+                || prestamo.getFechaPrestamo().getYear() > 9999
+                || prestamo.getFechaEsperadaDevolucion().getYear() < 1
+                || prestamo.getFechaEsperadaDevolucion().getYear() > 9999) {
+            throw new BusinessException("Las fechas deben estar entre los años 1 y 9999.");
+        }
+
         if (prestamo.getFechaEsperadaDevolucion()
                 .isBefore(prestamo.getFechaPrestamo())) {
             throw new BusinessException(
@@ -268,12 +316,12 @@ public class PrestamoService {
         }
 
         String codigo = codigoInventario.trim();
+        if (codigo.length() > 30) {
+            throw new BusinessException("El código de inventario no puede superar los 30 caracteres.");
+        }
 
         try {
-            Equipo equipo = equipoRepository.listarTodos()
-                    .stream()
-                    .filter(e -> codigo.equals(e.getCodigoInventario()))
-                    .findFirst()
+            Equipo equipo = equipoRepository.buscarPorCodigoInventario(codigo)
                     .orElseThrow(() -> new BusinessException(
                             "No existe un equipo con ese código de inventario."
                     ));
@@ -293,6 +341,15 @@ public class PrestamoService {
             );
         }
     }
+    public Equipo identificarEquipoPorQr(File imagen) {
+        QrEquipoService.Resultado resultado = qrEquipos.identificar(imagen);
+        if (!resultado.disponibleParaUso()) {
+            throw new BusinessException("El equipo no está disponible para préstamo. Estado: "
+                    + resultado.equipo().getEstado());
+        }
+        return resultado.equipo();
+    }
+
     public List<DetallePrestamo> buscarDetalles(int idPrestamo) {
         if (idPrestamo <= 0) {
             throw new BusinessException(

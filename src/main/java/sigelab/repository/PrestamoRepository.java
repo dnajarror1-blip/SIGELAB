@@ -2,6 +2,7 @@ package sigelab.repository;
 
 import sigelab.exception.DataAccessException;
 import sigelab.model.Prestamo;
+import sigelab.model.Rol;
 
 import java.sql.Connection;
 import java.sql.Date;
@@ -16,6 +17,27 @@ import java.util.ArrayList;
 import java.util.List;
 
 public class PrestamoRepository {
+
+    /** Consulta mínima de los participantes usando la conexión del préstamo. */
+    public Optional<Rol> buscarRolDeUsuarioActivo(Connection conn, int idUsuario) {
+        String sql = """
+                SELECT r.id_rol, r.nombre
+                FROM dbo.Usuario u
+                JOIN dbo.Rol r ON r.id_rol = u.id_rol
+                WHERE u.id_usuario = ? AND u.estado = 'ACTIVO'
+                """;
+        try (PreparedStatement stmt = conn.prepareStatement(sql)) {
+            stmt.setInt(1, idUsuario);
+            try (ResultSet rs = stmt.executeQuery()) {
+                if (!rs.next()) return Optional.empty();
+                Rol rol = new Rol(rs.getString("nombre"));
+                rol.setIdRol(rs.getInt("id_rol"));
+                return Optional.of(rol);
+            }
+        } catch (SQLException e) {
+            throw new DataAccessException("No se pudo consultar al participante del préstamo.", e);
+        }
+    }
 
     public int guardar(Connection connection, Prestamo prestamo) {
         String sql = """

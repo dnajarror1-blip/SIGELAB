@@ -82,6 +82,22 @@ class PrestamoServiceTest {
         comprobarEstadoBloqueado(EstadoEquipo.BAJA);
     }
 
+    @Test
+    void rechazaFechasFueraDelRangoSqlServer() {
+        Prestamo prestamo = crearPrestamoValido();
+        prestamo.setFechaEsperadaDevolucion(LocalDate.of(10000, 1, 1));
+        assertThrows(BusinessException.class,
+                () -> servicio.crearPrestamo(prestamo, List.of(1)));
+    }
+
+    @Test
+    void rechazaObservacionesMayoresAlLimiteSql() {
+        Prestamo prestamo = crearPrestamoValido();
+        prestamo.setObservaciones("x".repeat(251));
+        assertThrows(BusinessException.class,
+                () -> servicio.crearPrestamo(prestamo, List.of(1)));
+    }
+
     private void comprobarEstadoBloqueado(EstadoEquipo estado) {
         Equipo equipo = new Equipo();
         equipo.setIdEquipo(100);

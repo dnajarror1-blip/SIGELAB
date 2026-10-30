@@ -139,7 +139,7 @@ public class PrestamoRegistroDialog extends JDialog {
         agregarFila(formulario, gbc, fila++, txtEquipos);
 
         JLabel ayudaEquipos = etiqueta(
-                "Ejemplo: 5, 6. También puedes agregar equipos mediante QR."
+                "Ejemplo: 5, 6. Para quitar un equipo, borra su ID de la lista."
         );
         ayudaEquipos.setForeground(SUAVE);
         agregarFila(formulario, gbc, fila++, ayudaEquipos);
@@ -303,6 +303,14 @@ public class PrestamoRegistroDialog extends JDialog {
                     LocalDate.parse(txtFechaDevolucion.getText().trim());
 
             idsEquipo = leerIdsEquipo();
+            if (idsEquipo.isEmpty()) {
+                mostrarAviso("El préstamo debe incluir al menos un equipo.");
+                return;
+            }
+            if (new java.util.HashSet<>(idsEquipo).size() != idsEquipo.size()) {
+                mostrarAviso("El mismo equipo no puede repetirse en el préstamo.");
+                return;
+            }
 
             prestamo = new Prestamo(
                     idSolicitante,
