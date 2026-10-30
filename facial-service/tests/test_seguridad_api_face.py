@@ -1,4 +1,5 @@
 import unittest
+from unittest.mock import patch
 
 from fastapi.testclient import TestClient
 from app.main import app
@@ -60,6 +61,17 @@ class TestSeguridadAPIFacial(unittest.TestCase):
 
         self.assertEqual(respuesta.status_code, 401)
 
+    def test_sin_autorizacion_no_utiliza_camara(self):
+        """Una solicitud sin autorización no debe acceder al bloqueo de cámara."""
 
+        with patch("app.main.BLOQUEO_CAMARA") as bloqueo:
+            respuesta = self.cliente.post(
+                "/face/verify",
+                json={"userId": 8}
+            )
+
+            self.assertEqual(respuesta.status_code, 401)
+            bloqueo.acquire.assert_not_called()
+            
 if __name__ == "__main__":
     unittest.main()
