@@ -115,7 +115,7 @@ class MantenimientoSqlIT {
         assertTrue(
                 existeAuditoria(
                         idMantenimientoCreado,
-                        "MANTENIMIENTO_INICIO"
+                        "EQUIPO_ENVIADO_MANTENIMIENTO"
                 )
         );
 
@@ -155,7 +155,7 @@ class MantenimientoSqlIT {
         assertTrue(
                 existeAuditoria(
                         idMantenimientoCreado,
-                        "MANTENIMIENTO_REPARADO"
+                        "MANTENIMIENTO_FINALIZADO"
                 )
         );
     }

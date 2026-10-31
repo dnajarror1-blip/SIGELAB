@@ -6,6 +6,8 @@ import java.time.LocalDate;
 import java.util.List;
 import java.util.Optional;
 import sigelab.config.DatabaseConfig;
+import sigelab.exception.BusinessException;
+import sigelab.exception.DataAccessException;
 import sigelab.enums.EstadoEquipo;
 import sigelab.enums.EstadoMantenimiento;
 import sigelab.enums.ResultadoMantenimiento;
@@ -21,6 +23,13 @@ public class MantenimientoService {
     private final EquipoRepository equipoRepository;
     private final AuditService auditoriaService;
 
+    @FunctionalInterface
+    interface ConexionMantenimiento {
+        Connection abrir() throws SQLException;
+    }
+
+    private final ConexionMantenimiento conexiones;
+
     public MantenimientoService() {
         this(new MantenimientoRepository(), new EquipoRepository(), new AuditService());
     }
@@ -28,6 +37,13 @@ public class MantenimientoService {
     public MantenimientoService(MantenimientoRepository mantenimientoRepository,
                                 EquipoRepository equipoRepository,
                                 AuditService auditoriaService) {
+        this(mantenimientoRepository, equipoRepository, auditoriaService, DatabaseConfig::getConnection);
+    }
+
+    MantenimientoService(MantenimientoRepository mantenimientoRepository,
+            EquipoRepository equipoRepository, AuditService auditoriaService,
+            ConexionMantenimiento conexiones) {
+        this.conexiones = conexiones;
         this.mantenimientoRepository = mantenimientoRepository;
         this.equipoRepository = equipoRepository;
         this.auditoriaService = auditoriaService;
@@ -40,40 +56,39 @@ public class MantenimientoService {
     public Mantenimiento ingresarATaller(int idEquipo, TipoMantenimiento tipo, int idResponsable,
                                         String descripcion, String observaciones) {
         if (idEquipo <= 0) {
-            throw new IllegalArgumentException("El identificador del equipo no es válido.");
+            throw new BusinessException("El identificador del equipo no es válido.");
         }
         if (tipo == null) {
-            throw new IllegalArgumentException("Debe especificar el tipo de mantenimiento (PREVENTIVO o CORRECTIVO).");
+            throw new BusinessException("Debe especificar el tipo de mantenimiento (PREVENTIVO o CORRECTIVO).");
         }
         if (descripcion == null || descripcion.isBlank()) {
-            throw new IllegalArgumentException("Debe proporcionar una descripción o diagnóstico inicial.");
+            throw new BusinessException("Debe proporcionar una descripción o diagnóstico inicial.");
         }
+        validarLongitud(descripcion, 300, "La descripción");
+        validarLongitud(observaciones, 250, "Las observaciones");
         if (idResponsable <= 0) {
-            throw new IllegalArgumentException("Debe especificar el usuario responsable del mantenimiento.");
+            throw new BusinessException("Debe especificar el usuario responsable del mantenimiento.");
         }
 
-        Connection conn = null;
-        try {
-            conn = DatabaseConfig.getConnection();
-            conn.setAutoCommit(false);
+        return enTransaccion(conn -> {
+            auditoriaService.validarAcceso(conn, idResponsable, Modulo.MANTENIMIENTO);
 
             Optional<Equipo> equipoOpt = equipoRepository.buscarPorId(idEquipo, conn);
             if (equipoOpt.isEmpty()) {
-                throw new IllegalArgumentException("El equipo especificado no existe en el sistema.");
+                throw new BusinessException("El equipo especificado no existe en el sistema.");
             }
 
             Equipo equipo = equipoOpt.get();
             EstadoEquipo estadoActual = equipo.getEstado();
 
-            // RN-14: Solo equipos DISPONIBLE o DANADO pueden ingresar a mantenimiento
-            if (estadoActual == EstadoEquipo.PRESTADO) {
-                throw new IllegalStateException("El equipo está actualmente en préstamo y no puede enviarse a taller.");
+            if (estadoActual != EstadoEquipo.DANADO && estadoActual != EstadoEquipo.DISPONIBLE) {
+                throw new BusinessException("El estado del equipo no permite mantenimiento: " + estadoActual);
             }
-            if (estadoActual == EstadoEquipo.MANTENIMIENTO) {
-                throw new IllegalStateException("El equipo ya se encuentra actualmente en mantenimiento.");
+            if (estadoActual == EstadoEquipo.DISPONIBLE && tipo != TipoMantenimiento.PREVENTIVO) {
+                throw new BusinessException("Un equipo disponible solo puede ingresar a mantenimiento preventivo.");
             }
-            if (estadoActual == EstadoEquipo.BAJA) {
-                throw new IllegalStateException("El equipo ha sido dado de baja y no puede ingresar a mantenimiento.");
+            if (mantenimientoRepository.existeAbierto(idEquipo, conn)) {
+                throw new BusinessException("El equipo ya tiene un mantenimiento abierto.");
             }
 
             Mantenimiento nuevoMantenimiento = new Mantenimiento();
@@ -92,38 +107,15 @@ public class MantenimientoService {
 
             auditoriaService.registrar(
                 idResponsable,
-                "MANTENIMIENTO_INICIO",
+                "EQUIPO_ENVIADO_MANTENIMIENTO",
                 "Mantenimiento",
                 guardado.getIdMantenimiento(),
-                "Ingreso a taller (" + tipo + ") del equipo ID " + idEquipo + ": " + descripcion,
+                "Ingreso a taller (" + tipo + ") del equipo ID " + idEquipo + ": " + descripcion.trim(),
                 conn
             );
 
-            conn.commit();
             return guardado;
-
-        } catch (Exception e) {
-            if (conn != null) {
-                try {
-                    conn.rollback();
-                } catch (SQLException rollbackEx) {
-                    System.err.println("[ERROR-ROLLBACK] Error al revertir transaccion de mantenimiento: " + rollbackEx.getMessage());
-                }
-            }
-            if (e instanceof RuntimeException) {
-                throw (RuntimeException) e;
-            }
-            throw new RuntimeException("Error en la transacción al ingresar equipo a mantenimiento: " + e.getMessage(), e);
-        } finally {
-            if (conn != null) {
-                try {
-                    conn.setAutoCommit(true);
-                    conn.close();
-                } catch (SQLException closeEx) {
-                    System.err.println("[ERROR-CONEXION] Error al cerrar conexion: " + closeEx.getMessage());
-                }
-            }
-        }
+        });
     }
 
     /**
@@ -134,84 +126,105 @@ public class MantenimientoService {
     public void finalizarMantenimiento(int idMantenimiento, ResultadoMantenimiento resultado,
                                        String observacionesFinales, Integer idUsuarioAuditoria) {
         if (idMantenimiento <= 0) {
-            throw new IllegalArgumentException("El identificador del mantenimiento no es válido.");
+            throw new BusinessException("El identificador del mantenimiento no es válido.");
         }
         if (resultado == null) {
-            throw new IllegalArgumentException("Debe especificar el resultado técnico del mantenimiento.");
+            throw new BusinessException("Debe especificar el resultado técnico del mantenimiento.");
         }
 
-        Connection conn = null;
-        try {
-            conn = DatabaseConfig.getConnection();
-            conn.setAutoCommit(false);
+        if (idUsuarioAuditoria == null || idUsuarioAuditoria <= 0) {
+            throw new BusinessException("Debe identificar al usuario que finaliza el mantenimiento.");
+        }
+        enTransaccion(conn -> {
+            auditoriaService.validarAcceso(conn, idUsuarioAuditoria, Modulo.MANTENIMIENTO);
 
             Optional<Mantenimiento> mantOpt = mantenimientoRepository.buscarPorId(idMantenimiento, conn);
             if (mantOpt.isEmpty()) {
-                throw new IllegalArgumentException("La orden de mantenimiento especificada no existe.");
+                throw new BusinessException("La orden de mantenimiento especificada no existe.");
             }
 
             Mantenimiento m = mantOpt.get();
-            if (m.getEstado() == EstadoMantenimiento.CERRADO) {
-                throw new IllegalStateException("La orden de mantenimiento ya fue finalizada previamente.");
+            if (m.getEstado() != EstadoMantenimiento.ABIERTO) {
+                throw new BusinessException("La orden de mantenimiento ya fue finalizada previamente.");
             }
 
+            Equipo equipo = equipoRepository.buscarPorId(m.getIdEquipo(), conn)
+                    .orElseThrow(() -> new BusinessException("El equipo del mantenimiento no existe."));
+            if (equipo.getEstado() != EstadoEquipo.MANTENIMIENTO) {
+                throw new BusinessException("El equipo ya no está en mantenimiento. Revise su estado.");
+            }
+            if (m.getFechaIngreso() == null || m.getFechaIngreso().isAfter(LocalDate.now())) {
+                throw new BusinessException("La fecha de ingreso del mantenimiento no es válida para el cierre.");
+            }
             m.setFechaSalida(LocalDate.now());
             m.setResultado(resultado);
             m.setEstado(EstadoMantenimiento.CERRADO);
 
             String obsPrevias = m.getObservaciones() != null ? m.getObservaciones() : "";
             String obsNuevas = observacionesFinales != null ? observacionesFinales.trim() : "";
-            String obsCompletas = obsPrevias.isEmpty() ? obsNuevas : obsPrevias + " | Cierre: " + obsNuevas;
+            String obsCompletas = obsNuevas.isEmpty() ? obsPrevias
+                    : obsPrevias.isEmpty() ? obsNuevas : obsPrevias + " | Cierre: " + obsNuevas;
+            validarLongitud(obsCompletas, 250, "Las observaciones acumuladas");
             m.setObservaciones(obsCompletas);
 
             mantenimientoRepository.actualizar(m, conn);
 
             // Bifurcación técnica según RN-15
             EstadoEquipo nuevoEstadoEquipo;
-            String accionAuditoria;
 
             if (resultado == ResultadoMantenimiento.REPARADO) {
                 nuevoEstadoEquipo = EstadoEquipo.DISPONIBLE; // CP-16
-                accionAuditoria = "MANTENIMIENTO_REPARADO";
             } else {
                 nuevoEstadoEquipo = EstadoEquipo.BAJA; // CP-17
-                accionAuditoria = "EQUIPO_BAJA";
             }
 
             equipoRepository.actualizarEstado(m.getIdEquipo(), nuevoEstadoEquipo, conn);
 
             auditoriaService.registrar(
-                idUsuarioAuditoria != null ? idUsuarioAuditoria : m.getIdResponsable(),
-                accionAuditoria,
+                idUsuarioAuditoria,
+                "MANTENIMIENTO_FINALIZADO",
                 "Mantenimiento",
                 m.getIdMantenimiento(),
                 "Cierre de mantenimiento (" + resultado + ") para equipo ID " + m.getIdEquipo() + ". Nuevo estado: " + nuevoEstadoEquipo,
                 conn
             );
 
-            conn.commit();
+            return null;
+        });
+    }
 
-        } catch (Exception e) {
-            if (conn != null) {
+    @FunctionalInterface
+    private interface Operacion<T> {
+        T ejecutar(Connection conn) throws SQLException;
+    }
+
+    private <T> T enTransaccion(Operacion<T> operacion) {
+        try (Connection conn = conexiones.abrir()) {
+            // Retiene las lecturas hasta commit: una operación concurrente debe
+            // esperar o abortar, nunca sobrescribir un estado validado obsoleto.
+            conn.setTransactionIsolation(Connection.TRANSACTION_SERIALIZABLE);
+            conn.setAutoCommit(false);
+            try {
+                T resultado = operacion.ejecutar(conn);
+                conn.commit();
+                return resultado;
+            } catch (SQLException | RuntimeException e) {
                 try {
                     conn.rollback();
-                } catch (SQLException rollbackEx) {
-                    System.err.println("[ERROR-ROLLBACK] Error al revertir transaccion de cierre: " + rollbackEx.getMessage());
+                } catch (SQLException rollbackError) {
+                    e.addSuppressed(rollbackError);
                 }
+                if (e instanceof BusinessException negocio) throw negocio;
+                throw new DataAccessException("No se pudo completar el mantenimiento. Compruebe su estado antes de reintentar.", e);
             }
-            if (e instanceof RuntimeException) {
-                throw (RuntimeException) e;
-            }
-            throw new RuntimeException("Error en la transacción al finalizar mantenimiento: " + e.getMessage(), e);
-        } finally {
-            if (conn != null) {
-                try {
-                    conn.setAutoCommit(true);
-                    conn.close();
-                } catch (SQLException closeEx) {
-                    System.err.println("[ERROR-CONEXION] Error al cerrar conexion: " + closeEx.getMessage());
-                }
-            }
+        } catch (SQLException e) {
+            throw new DataAccessException("No se pudo conectar para procesar el mantenimiento.", e);
+        }
+    }
+
+    private void validarLongitud(String texto, int maximo, String campo) {
+        if (texto != null && texto.trim().length() > maximo) {
+            throw new BusinessException(campo + " no puede superar " + maximo + " caracteres.");
         }
     }
 
@@ -219,7 +232,7 @@ public class MantenimientoService {
         try {
             return mantenimientoRepository.listarPorEstado(EstadoMantenimiento.ABIERTO);
         } catch (SQLException e) {
-            throw new RuntimeException("Error al consultar mantenimientos activos: " + e.getMessage(), e);
+            throw new DataAccessException("No se pudieron consultar los mantenimientos activos.", e);
         }
     }
 
@@ -227,7 +240,7 @@ public class MantenimientoService {
         try {
             return mantenimientoRepository.listarPorEquipo(idEquipo);
         } catch (SQLException e) {
-            throw new RuntimeException("Error al consultar historial de equipo: " + e.getMessage(), e);
+            throw new DataAccessException("No se pudo consultar el historial del equipo.", e);
         }
     }
 
@@ -235,7 +248,7 @@ public class MantenimientoService {
         try {
             return mantenimientoRepository.listarTodos();
         } catch (SQLException e) {
-            throw new RuntimeException("Error al consultar todos los mantenimientos: " + e.getMessage(), e);
+            throw new DataAccessException("No se pudieron consultar los mantenimientos.", e);
         }
     }
 }

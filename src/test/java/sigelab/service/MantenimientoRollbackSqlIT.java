@@ -71,7 +71,7 @@ class MantenimientoRollbackSqlIT {
                 0,
                 consultarCantidad(
                         "SELECT COUNT(*) FROM dbo.Usuario WHERE id_usuario = ?",
-                        ID_USUARIO_INEXISTENTE
+                        ID_USUARIO_VALIDO
                 )
         );
 
@@ -82,7 +82,20 @@ class MantenimientoRollbackSqlIT {
                 .replace("-", "")
                 .substring(0, 12);
 
-        MantenimientoService service = new MantenimientoService();
+        // Inyectar el fallo en el INSERT de auditoría después de las actualizaciones,
+        // conservando un actor autorizado para alcanzar ese punto de la transacción.
+        AuditService auditoriaFallida = new AuditService(new sigelab.repository.AuditoriaRepository() {
+            @Override
+            public void guardar(sigelab.model.Auditoria evento, Connection conn) throws SQLException {
+                if ("MANTENIMIENTO_FINALIZADO".equals(evento.getAccion())) {
+                    throw new SQLException("Fallo de auditoría simulado en la base de pruebas");
+                }
+                super.guardar(evento, conn);
+            }
+        });
+        MantenimientoService service = new MantenimientoService(
+                new sigelab.repository.MantenimientoRepository(),
+                new sigelab.repository.EquipoRepository(), auditoriaFallida);
 
         // Iniciar mantenimiento.
         Mantenimiento nuevo = service.ingresarATaller(
@@ -108,14 +121,14 @@ class MantenimientoRollbackSqlIT {
         assertEquals("MANTENIMIENTO", estadoEquipo());
 
         // Provocar un error durante la auditoría.
-        // El usuario inexistente debe causar el fallo de la FK.
+        // El repositorio de auditoría simulado falla al registrar el cierre.
         assertThrows(
                 RuntimeException.class,
                 () -> service.finalizarMantenimiento(
                         idMantenimientoCreado,
                         ResultadoMantenimiento.REPARADO,
                         "Cierre que debe revertirse",
-                        ID_USUARIO_INEXISTENTE
+                        ID_USUARIO_VALIDO
                 )
         );
 
@@ -165,7 +178,7 @@ class MantenimientoRollbackSqlIT {
                 SELECT COUNT(*)
                 FROM dbo.Auditoria
                 WHERE entidad = 'Mantenimiento'
-                  AND accion = 'MANTENIMIENTO_REPARADO'
+                  AND accion = 'MANTENIMIENTO_FINALIZADO'
                   AND id_registro = ?
                 """;
 
