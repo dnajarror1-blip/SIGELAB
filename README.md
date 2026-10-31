@@ -53,6 +53,16 @@ En otra terminal, enrollment solo si el ADMIN existente aún no tiene perfil; de
 .\run-sigelab-windows.ps1
 ```
 
+## Arranque rápido en Linux
+
+Ver [guía Linux](docs/GUIA_LINUX.md) para comprobación de paquetes, permisos V4L2 y diagnósticos.
+
+```bash
+docker start sigelab-sqlserver
+./run-sigelab-linux.sh
+```
+
+
 ## Primera ejecución
 
 Sobre esta base SIGELAB existente, sin recrearla:
