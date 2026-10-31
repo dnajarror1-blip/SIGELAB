@@ -9,7 +9,7 @@ import javax.swing.table.DefaultTableModel;
 import java.awt.*;
 import java.util.List;
 
-public class LaboratorioView extends JFrame {
+public class LaboratorioView extends JPanel {
 
     private final LaboratorioController controller;
 
@@ -40,7 +40,7 @@ public class LaboratorioView extends JFrame {
         controller =
                 new LaboratorioController(soloLectura);
 
-        configurarVentana();
+        configurarPanel();
         crearComponentes();
         if (soloLectura) {
             btnGuardar.setVisible(false);
@@ -56,25 +56,12 @@ public class LaboratorioView extends JFrame {
     }
 
 
-    // Configuración general de la ventana.
-    private void configurarVentana() {
+    /** Actualiza la lista al volver a la tarjeta sin recrear el formulario. */
+    public void refrescar() {
+        cargarLaboratorios();
+    }
 
-        setTitle(
-                "SIGELAB - Laboratorios"
-        );
-
-        setSize(
-                900,
-                550
-        );
-
-        setLocationRelativeTo(
-                null
-        );
-
-        setDefaultCloseOperation(
-                JFrame.DISPOSE_ON_CLOSE
-        );
+    private void configurarPanel() {
 
         setLayout(
                 new BorderLayout(

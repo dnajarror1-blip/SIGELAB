@@ -12,7 +12,7 @@ import java.awt.*;
 import java.util.ArrayList;
 import java.util.List;
 
-public class EquipoView extends JFrame {
+public class EquipoView extends JPanel {
 
     private final EquipoController controller;
 
@@ -49,7 +49,7 @@ public class EquipoView extends JFrame {
         controller =
                 new EquipoController(soloLectura);
 
-        configurarVentana();
+        configurarPanel();
         crearComponentes();
         if (soloLectura) {
             btnGuardar.setVisible(false);
@@ -69,24 +69,17 @@ public class EquipoView extends JFrame {
     }
 
 
-    private void configurarVentana() {
+    /** Actualiza listas al volver a la tarjeta, conservando la selección del formulario. */
+    public void refrescar() {
+        TipoEquipo tipo = (TipoEquipo) cmbTipoEquipo.getSelectedItem();
+        Laboratorio laboratorio = (Laboratorio) cmbLaboratorio.getSelectedItem();
+        cargarCatalogos();
+        if (tipo != null) seleccionarTipo(tipo.getIdTipoEquipo());
+        if (laboratorio != null) seleccionarLaboratorio(laboratorio.getIdLaboratorio());
+        cargarEquipos();
+    }
 
-        setTitle(
-                "SIGELAB - Equipos"
-        );
-
-        setSize(
-                1200,
-                700
-        );
-
-        setLocationRelativeTo(
-                null
-        );
-
-        setDefaultCloseOperation(
-                JFrame.DISPOSE_ON_CLOSE
-        );
+    private void configurarPanel() {
 
         setLayout(
                 new BorderLayout(

@@ -12,6 +12,13 @@ import javax.swing.table.DefaultTableCellRenderer;
 import javax.swing.table.DefaultTableModel;
 
 import sigelab.controller.PrestamoController;
+import sigelab.controller.CatalogoSeleccionController;
+import sigelab.service.Modulo;
+import sigelab.service.CatalogoSeleccionService.EquipoOpcion;
+import sigelab.view.ui.UiTheme;
+import java.util.Map;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 import sigelab.enums.EstadoPrestamo;
 import sigelab.exception.BusinessException;
 import sigelab.model.DetallePrestamo;
@@ -19,12 +26,12 @@ import sigelab.model.Prestamo;
 
 public class PrestamoView extends JPanel {
 
-    private static final Color FONDO = new Color(242, 245, 249);
-    private static final Color MARINO = new Color(24, 42, 65);
-    private static final Color PETROLEO = new Color(20, 105, 103);
-    private static final Color TEXTO = new Color(38, 52, 70);
-    private static final Color SUAVE = new Color(100, 116, 139);
-    private static final Color BORDE = new Color(218, 225, 234);
+    private static final Color FONDO = UiTheme.FONDO;
+    private static final Color MARINO = UiTheme.LATERAL;
+    private static final Color PETROLEO = UiTheme.ACENTO;
+    private static final Color TEXTO = UiTheme.TEXTO;
+    private static final Color SUAVE = UiTheme.SECUNDARIO;
+    private static final Color BORDE = UiTheme.BORDE;
     private static final Color FILA_ALTERNA = new Color(247, 249, 252);
     private static final Color SELECCION = new Color(218, 235, 242);
 
@@ -36,6 +43,7 @@ public class PrestamoView extends JPanel {
 
     private final PrestamoController controller;
     private final int idUsuarioActual;
+    private final CatalogoSeleccionController catalogos;
 
     private final JTextField txtIdPrestamo = new JTextField(12);
 
@@ -54,8 +62,8 @@ public class PrestamoView extends JPanel {
             new DefaultTableModel(
                     new String[]{
                             "N.º préstamo",
-                            "ID solicitante",
-                            "ID de quien registra",
+                            "Solicitante",
+                            "Registrado por",
                             "Fecha de préstamo",
                             "Devolución prevista",
                             "Estado",
@@ -70,7 +78,7 @@ public class PrestamoView extends JPanel {
 
                 @Override
                 public Class<?> getColumnClass(int columna) {
-                    if (columna <= 2) {
+                    if (columna == 0) {
                         return Integer.class;
                     }
                     if (columna == 3 || columna == 4) {
@@ -90,6 +98,7 @@ public class PrestamoView extends JPanel {
     ) {
         this.controller = controller;
         this.idUsuarioActual = idUsuarioActual;
+        this.catalogos = new CatalogoSeleccionController(idUsuarioActual, Modulo.RESERVAS_PRESTAMOS);
 
         inicializarComponentes();
         cargarDatos();
@@ -253,7 +262,7 @@ public class PrestamoView extends JPanel {
 
     private void configurarTabla(JTable tablaObjetivo) {
         tablaObjetivo.setFont(FUENTE);
-        tablaObjetivo.setRowHeight(36);
+        UiTheme.tabla(tablaObjetivo);
         tablaObjetivo.setShowGrid(false);
         tablaObjetivo.setIntercellSpacing(new Dimension(0, 0));
         tablaObjetivo.setFillsViewportHeight(true);
@@ -351,29 +360,26 @@ public class PrestamoView extends JPanel {
         cambiarEstadoCarga(true);
         lblEstado.setText("Consultando préstamos...");
 
-        new SwingWorker<List<Prestamo>, Void>() {
+        new SwingWorker<DatosPrestamos, Void>() {
             @Override
-            protected List<Prestamo> doInBackground() {
-                if (idPrestamo == null) {
-                    return controller.buscarActivos();
-                }
-
-                return controller.buscarPorId(idPrestamo)
-                        .map(List::of)
-                        .orElseGet(List::of);
+            protected DatosPrestamos doInBackground() {
+                List<Prestamo> lista = idPrestamo == null ? controller.buscarActivos()
+                        : controller.buscarPorId(idPrestamo).map(List::of).orElseGet(List::of);
+                return new DatosPrestamos(lista, catalogos.nombresUsuarios());
             }
 
             @Override
             protected void done() {
                 try {
-                    List<Prestamo> prestamos = get();
+                    DatosPrestamos datos = get();
+                    List<Prestamo> prestamos = datos.prestamos();
                     modeloTabla.setRowCount(0);
 
                     for (Prestamo prestamo : prestamos) {
                         modeloTabla.addRow(new Object[]{
                                 prestamo.getIdPrestamo(),
-                                prestamo.getIdUsuarioSolicitante(),
-                                prestamo.getIdUsuarioRegistra(),
+                                datos.usuarios().getOrDefault(prestamo.getIdUsuarioSolicitante(), "Usuario no disponible"),
+                                datos.usuarios().getOrDefault(prestamo.getIdUsuarioRegistra(), "Usuario no disponible"),
                                 prestamo.getFechaPrestamo(),
                                 prestamo.getFechaEsperadaDevolucion(),
                                 prestamo.getEstado(),
@@ -389,7 +395,7 @@ public class PrestamoView extends JPanel {
 
                     lblEstado.setText(
                             prestamos.isEmpty()
-                                    ? "No se encontraron préstamos."
+                                    ? "No hay préstamos activos para esta búsqueda."
                                     : "Consulta completada. Selecciona una fila "
                                     + "para ver sus equipos."
                     );
@@ -414,6 +420,9 @@ public class PrestamoView extends JPanel {
             }
         }.execute();
     }
+
+    private record DatosPrestamos(List<Prestamo> prestamos, Map<Integer, String> usuarios) { }
+    private record DatosDetalles(List<DetallePrestamo> detalles, Map<Integer, EquipoOpcion> equipos) { }
 
     private void mostrarRegistro() {
         PrestamoRegistroDialog dialogo = new PrestamoRegistroDialog(
@@ -448,20 +457,22 @@ public class PrestamoView extends JPanel {
         cambiarEstadoCarga(true);
         lblEstado.setText("Consultando equipos del préstamo...");
 
-        new SwingWorker<List<DetallePrestamo>, Void>() {
+        new SwingWorker<DatosDetalles, Void>() {
             @Override
-            protected List<DetallePrestamo> doInBackground() {
-                return controller.buscarDetalles(idPrestamo);
+            protected DatosDetalles doInBackground() {
+                return new DatosDetalles(controller.buscarDetalles(idPrestamo), catalogos.listarEquipos(false).stream()
+                        .collect(Collectors.toMap(e -> e.equipo().getIdEquipo(), Function.identity())));
             }
 
             @Override
             protected void done() {
                 try {
-                    List<DetallePrestamo> detalles = get();
+                    DatosDetalles datos = get();
+                    List<DetallePrestamo> detalles = datos.detalles();
 
                     DefaultTableModel modelo = new DefaultTableModel(
                             new String[]{
-                                    "N.º detalle", "N.º préstamo", "ID equipo"
+                                    "Código", "Equipo", "Laboratorio", "Estado actual"
                             },
                             0
                     ) {
@@ -472,16 +483,14 @@ public class PrestamoView extends JPanel {
 
                         @Override
                         public Class<?> getColumnClass(int columna) {
-                            return Integer.class;
+                            return Object.class;
                         }
                     };
 
                     for (DetallePrestamo detalle : detalles) {
-                        modelo.addRow(new Object[]{
-                                detalle.getIdDetallePrestamo(),
-                                detalle.getIdPrestamo(),
-                                detalle.getIdEquipo()
-                        });
+                        EquipoOpcion equipo = datos.equipos().get(detalle.getIdEquipo());
+                        modelo.addRow(equipo == null ? new Object[]{"—", "Equipo no disponible", "—", "—"}
+                                : new Object[]{equipo.equipo().getCodigoInventario(), equipo.equipo().getNombre(), equipo.laboratorio(), equipo.equipo().getEstado()});
                     }
 
                     JTable tablaDetalles = new JTable(modelo);

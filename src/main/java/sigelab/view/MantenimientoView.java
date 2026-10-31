@@ -6,6 +6,13 @@ import java.awt.Frame;
 import java.awt.GridBagConstraints;
 import java.awt.GridBagLayout;
 import java.awt.Insets;
+import sigelab.controller.CatalogoSeleccionController;
+import sigelab.service.CatalogoSeleccionService.EquipoOpcion;
+import sigelab.service.Modulo;
+import sigelab.view.ui.UiTheme;
+import java.util.Map;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 import java.util.List;
 import javax.swing.BorderFactory;
 import javax.swing.JButton;
@@ -32,6 +39,8 @@ public class MantenimientoView extends JPanel {
 
     private final MantenimientoController mantenimientoService;
 
+    private final CatalogoSeleccionController catalogos;
+    private final JLabel estadoCarga = new JLabel(" ");
     private JTable tablaMantenimientos;
     private DefaultTableModel modeloTabla;
     private JComboBox<String> comboFiltroEstado;
@@ -44,10 +53,12 @@ public class MantenimientoView extends JPanel {
     }
 
     public MantenimientoView(MantenimientoService mantenimientoService, int idUsuarioActual) {
-        this(new MantenimientoController(mantenimientoService, new AuditService(), idUsuarioActual));
+        this(new MantenimientoController(mantenimientoService, new AuditService(), idUsuarioActual),
+                new CatalogoSeleccionController(idUsuarioActual, Modulo.MANTENIMIENTO));
     }
 
-    MantenimientoView(MantenimientoController controller) {
+    MantenimientoView(MantenimientoController controller, CatalogoSeleccionController catalogos) {
+        this.catalogos = catalogos;
         this.mantenimientoService = controller;
         initComponents();
         cargarDatos();
@@ -61,7 +72,7 @@ public class MantenimientoView extends JPanel {
         JPanel panelSuperior = new JPanel(new BorderLayout(10, 10));
         JLabel lblTitulo = new JLabel("Gestión de Mantenimiento Técnico (Taller)");
         lblTitulo.setFont(lblTitulo.getFont().deriveFont(18f));
-        panelSuperior.add(lblTitulo, BorderLayout.WEST);
+        panelSuperior.add(lblTitulo, BorderLayout.NORTH);
 
         JPanel panelFiltros = new JPanel(new FlowLayout(FlowLayout.RIGHT));
         panelFiltros.add(new JLabel("Filtrar por estado:"));
@@ -73,11 +84,11 @@ public class MantenimientoView extends JPanel {
         btnRefrescar.addActionListener(e -> cargarDatos());
         panelFiltros.add(btnRefrescar);
 
-        panelSuperior.add(panelFiltros, BorderLayout.EAST);
+        panelSuperior.add(panelFiltros, BorderLayout.SOUTH);
         add(panelSuperior, BorderLayout.NORTH);
 
         // Panel Central (Tabla)
-        String[] columnas = {"ID", "ID Equipo", "Fecha Ingreso", "Tipo", "Descripción", "Responsable", "Fecha Salida", "Resultado", "Estado", "Observaciones"};
+        String[] columnas = {"Número", "Equipo", "Fecha Ingreso", "Tipo", "Descripción", "Fecha Salida", "Resultado", "Estado", "Observaciones"};
         modeloTabla = new DefaultTableModel(columnas, 0) {
             @Override
             public boolean isCellEditable(int row, int column) {
@@ -87,7 +98,8 @@ public class MantenimientoView extends JPanel {
 
         tablaMantenimientos = new JTable(modeloTabla);
         tablaMantenimientos.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
-        tablaMantenimientos.setRowHeight(24);
+        UiTheme.tabla(tablaMantenimientos);
+        tablaMantenimientos.setAutoCreateRowSorter(true);
         JScrollPane scrollTabla = new JScrollPane(tablaMantenimientos);
         add(scrollTabla, BorderLayout.CENTER);
 
@@ -101,6 +113,7 @@ public class MantenimientoView extends JPanel {
         btnFinalizar = new JButton("Finalizar Mantenimiento Seleccionado");
         btnFinalizar.addActionListener(e -> mostrarDialogoFinalizacion());
         panelAcciones.add(btnFinalizar);
+        panelAcciones.add(estadoCarga);
 
         add(panelAcciones, BorderLayout.SOUTH);
     }
@@ -110,61 +123,38 @@ public class MantenimientoView extends JPanel {
         int filtroIndex = comboFiltroEstado.getSelectedIndex();
         btnRefrescar.setEnabled(false);
         comboFiltroEstado.setEnabled(false);
+        btnNuevoIngreso.setEnabled(false);
+        btnFinalizar.setEnabled(false);
+        estadoCarga.setText("Cargando...");
         OperacionModulo.ejecutar(this, () -> {
-            if (filtroIndex == 1) return mantenimientoService.listarMantenimientosActivos();
-            List<Mantenimiento> lista = mantenimientoService.listarTodos();
-            return filtroIndex == 2 ? lista.stream()
-                    .filter(m -> m.getEstado() == EstadoMantenimiento.CERRADO).toList() : lista;
-        }, lista -> {
+            List<Mantenimiento> lista = filtroIndex == 1 ? mantenimientoService.listarMantenimientosActivos() : mantenimientoService.listarTodos();
+            if (filtroIndex == 2) lista = lista.stream().filter(m -> m.getEstado() == EstadoMantenimiento.CERRADO).toList();
+            return new Datos(lista, catalogos.listarEquipos(false).stream().collect(Collectors.toMap(e -> e.equipo().getIdEquipo(), Function.identity())));
+        }, datos -> {
             modeloTabla.setRowCount(0);
-            for (Mantenimiento m : lista) {
-                modeloTabla.addRow(new Object[]{m.getIdMantenimiento(), m.getIdEquipo(),
-                        m.getFechaIngreso(), m.getTipo(), m.getDescripcion(), m.getIdResponsable(),
+            for (Mantenimiento m : datos.lista()) {
+                EquipoOpcion equipo = datos.equipos().get(m.getIdEquipo());
+                modeloTabla.addRow(new Object[]{m.getIdMantenimiento(), equipo == null ? "Equipo no disponible" : equipo,
+                        m.getFechaIngreso(), m.getTipo(), m.getDescripcion(),
                         m.getFechaSalida(), m.getResultado(), m.getEstado(), m.getObservaciones()});
             }
+            estadoCarga.setText(datos.lista().isEmpty() ? "No existen mantenimientos para este filtro." : datos.lista().size() + " mantenimientos.");
         }, () -> {
-            btnRefrescar.setEnabled(true);
-            comboFiltroEstado.setEnabled(true);
+            btnRefrescar.setEnabled(true); comboFiltroEstado.setEnabled(true);
+            btnNuevoIngreso.setEnabled(true); btnFinalizar.setEnabled(true);
+            if ("Cargando...".equals(estadoCarga.getText())) estadoCarga.setText("No se pudo cargar. Pulsa Actualizar.");
         });
     }
+    private record Datos(List<Mantenimiento> lista, Map<Integer, EquipoOpcion> equipos) { }
 
     private void mostrarDialogoIngreso() {
         JDialog dialog = new JDialog((Frame) null, "Ingreso de Equipo a Mantenimiento", true);
         dialog.setLayout(new BorderLayout(10, 10));
-        dialog.setSize(450, 320);
+        dialog.setSize(640, 540);
         dialog.setLocationRelativeTo(this);
 
-        JPanel panelForm = new JPanel(new GridBagLayout());
+        IngresoMantenimientoPanel panelForm = new IngresoMantenimientoPanel();
         panelForm.setBorder(BorderFactory.createEmptyBorder(15, 15, 15, 15));
-        GridBagConstraints gbc = new GridBagConstraints();
-        gbc.insets = new Insets(5, 5, 5, 5);
-        gbc.fill = GridBagConstraints.HORIZONTAL;
-
-        JTextField txtIdEquipo = new JTextField(15);
-        JComboBox<TipoMantenimiento> comboTipo = new JComboBox<>(TipoMantenimiento.values());
-        JTextField txtDescripcion = new JTextField(15);
-        JTextArea txtObservaciones = new JTextArea(3, 15);
-        txtObservaciones.setLineWrap(true);
-
-        gbc.gridx = 0; gbc.gridy = 0;
-        panelForm.add(new JLabel("ID Equipo:"), gbc);
-        gbc.gridx = 1;
-        panelForm.add(txtIdEquipo, gbc);
-
-        gbc.gridx = 0; gbc.gridy = 1;
-        panelForm.add(new JLabel("Tipo:"), gbc);
-        gbc.gridx = 1;
-        panelForm.add(comboTipo, gbc);
-
-        gbc.gridx = 0; gbc.gridy = 2;
-        panelForm.add(new JLabel("Diagnóstico / Motivo:"), gbc);
-        gbc.gridx = 1;
-        panelForm.add(txtDescripcion, gbc);
-
-        gbc.gridx = 0; gbc.gridy = 3;
-        panelForm.add(new JLabel("Observaciones:"), gbc);
-        gbc.gridx = 1;
-        panelForm.add(new JScrollPane(txtObservaciones), gbc);
 
         dialog.add(panelForm, BorderLayout.CENTER);
 
@@ -174,31 +164,53 @@ public class MantenimientoView extends JPanel {
 
         btnGuardar.addActionListener(e -> {
             try {
-                int idEquipo = Integer.parseInt(txtIdEquipo.getText().trim());
-                TipoMantenimiento tipo = (TipoMantenimiento) comboTipo.getSelectedItem();
-                String desc = txtDescripcion.getText().trim();
-                String obs = txtObservaciones.getText().trim();
+                EquipoOpcion seleccionado = panelForm.equipo.seleccionado();
+                if (seleccionado == null) {
+                    JOptionPane.showMessageDialog(dialog, "Selecciona un equipo de la lista."); return;
+                }
+                int idEquipo = seleccionado.equipo().getIdEquipo();
+                TipoMantenimiento tipo = (TipoMantenimiento) panelForm.tipo.getSelectedItem();
+                String desc = panelForm.descripcion.getText().trim();
+                String obs = panelForm.observaciones.getText().trim();
 
                 btnGuardar.setEnabled(false);
+                btnCancelar.setEnabled(false);
+                panelForm.equipo.setEnabled(false); panelForm.tipo.setEnabled(false);
+                panelForm.descripcion.setEnabled(false); panelForm.observaciones.setEnabled(false);
                 OperacionModulo.ejecutar(dialog,
                         () -> mantenimientoService.ingresarATaller(idEquipo, tipo, desc, obs), guardado -> {
                     JOptionPane.showMessageDialog(dialog, "Equipo ingresado exitosamente al taller.", "Éxito", JOptionPane.INFORMATION_MESSAGE);
                     dialog.dispose();
                     cargarDatos();
-                }, () -> btnGuardar.setEnabled(true));
-            } catch (NumberFormatException nfe) {
-                JOptionPane.showMessageDialog(dialog, "El ID de equipo debe ser un número entero.", "Validación", JOptionPane.WARNING_MESSAGE);
+                }, () -> {
+                    btnGuardar.setEnabled(true); btnCancelar.setEnabled(true);
+                    panelForm.equipo.setEnabled(true); panelForm.tipo.setEnabled(true);
+                    panelForm.descripcion.setEnabled(true); panelForm.observaciones.setEnabled(true);
+                });
             } catch (Exception ex) {
                 JOptionPane.showMessageDialog(dialog, ex.getMessage(), "Error al ingresar", JOptionPane.ERROR_MESSAGE);
             }
         });
 
-        btnCancelar.addActionListener(e -> dialog.dispose());
+        dialog.setDefaultCloseOperation(JDialog.DO_NOTHING_ON_CLOSE);
+        dialog.addWindowListener(new java.awt.event.WindowAdapter() {
+            public void windowClosing(java.awt.event.WindowEvent e) { btnCancelar.doClick(); }
+        });
+        btnCancelar.addActionListener(e -> {
+            if (btnCancelar.isEnabled() && JOptionPane.showConfirmDialog(dialog, "¿Cancelar esta operación?",
+                    "Cancelar", JOptionPane.YES_NO_OPTION) == JOptionPane.YES_OPTION) dialog.dispose();
+        });
 
         panelBotones.add(btnCancelar);
         panelBotones.add(btnGuardar);
         dialog.add(panelBotones, BorderLayout.SOUTH);
 
+        btnGuardar.setEnabled(false);
+        panelForm.equipo.setEnabled(false);
+        btnGuardar.setText("Cargando...");
+        OperacionModulo.ejecutar(dialog, () -> catalogos.listarEquipos(false), lista -> {
+            panelForm.equipos(lista); panelForm.equipo.setEnabled(true); btnGuardar.setEnabled(true);
+        }, () -> btnGuardar.setText("Registrar ingreso"));
         dialog.setVisible(true);
     }
 
@@ -209,15 +221,16 @@ public class MantenimientoView extends JPanel {
             return;
         }
 
+        fila = tablaMantenimientos.convertRowIndexToModel(fila);
         int idMantenimiento = (int) modeloTabla.getValueAt(fila, 0);
-        EstadoMantenimiento estado = (EstadoMantenimiento) modeloTabla.getValueAt(fila, 8);
+        EstadoMantenimiento estado = (EstadoMantenimiento) modeloTabla.getValueAt(fila, 7);
 
         if (estado == EstadoMantenimiento.CERRADO) {
             JOptionPane.showMessageDialog(this, "Este mantenimiento ya está cerrado.", "Aviso", JOptionPane.WARNING_MESSAGE);
             return;
         }
 
-        JDialog dialog = new JDialog((Frame) null, "Finalizar Mantenimiento ID #" + idMantenimiento, true);
+        JDialog dialog = new JDialog((Frame) null, "Finalizar mantenimiento #" + idMantenimiento, true);
         dialog.setLayout(new BorderLayout(10, 10));
         dialog.setSize(450, 260);
         dialog.setLocationRelativeTo(this);
@@ -253,7 +266,10 @@ public class MantenimientoView extends JPanel {
                 ResultadoMantenimiento resultado = (ResultadoMantenimiento) comboResultado.getSelectedItem();
                 String obs = txtObservacionesFinales.getText().trim();
 
+                if (JOptionPane.showConfirmDialog(dialog, "¿Finalizar el mantenimiento con el resultado seleccionado?",
+                        "Finalizar mantenimiento", JOptionPane.YES_NO_OPTION) != JOptionPane.YES_OPTION) return;
                 btnGuardar.setEnabled(false);
+                btnCancelar.setEnabled(false);
                 OperacionModulo.ejecutar(dialog, () -> {
                     mantenimientoService.finalizarMantenimiento(idMantenimiento, resultado, obs);
                     return null;
@@ -261,13 +277,20 @@ public class MantenimientoView extends JPanel {
                     JOptionPane.showMessageDialog(dialog, "Mantenimiento finalizado exitosamente.", "Éxito", JOptionPane.INFORMATION_MESSAGE);
                     dialog.dispose();
                     cargarDatos();
-                }, () -> btnGuardar.setEnabled(true));
+                }, () -> { btnGuardar.setEnabled(true); btnCancelar.setEnabled(true); });
             } catch (Exception ex) {
                 JOptionPane.showMessageDialog(dialog, ex.getMessage(), "Error al finalizar", JOptionPane.ERROR_MESSAGE);
             }
         });
 
-        btnCancelar.addActionListener(e -> dialog.dispose());
+        dialog.setDefaultCloseOperation(JDialog.DO_NOTHING_ON_CLOSE);
+        dialog.addWindowListener(new java.awt.event.WindowAdapter() {
+            public void windowClosing(java.awt.event.WindowEvent e) { btnCancelar.doClick(); }
+        });
+        btnCancelar.addActionListener(e -> {
+            if (btnCancelar.isEnabled() && JOptionPane.showConfirmDialog(dialog, "¿Cancelar esta operación?",
+                    "Cancelar", JOptionPane.YES_NO_OPTION) == JOptionPane.YES_OPTION) dialog.dispose();
+        });
 
         panelBotones.add(btnCancelar);
         panelBotones.add(btnGuardar);

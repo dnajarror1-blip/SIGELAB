@@ -50,7 +50,7 @@ public class DevolucionView extends JPanel {
         arriba.add(prestamos, BorderLayout.CENTER);
         arriba.add(actualizar, BorderLayout.EAST);
         add(arriba, BorderLayout.NORTH);
-        tabla.setRowHeight(26);
+        sigelab.view.ui.UiTheme.tabla(tabla);
         tabla.getColumnModel().getColumn(3).setCellEditor(new DefaultCellEditor(
                 new JComboBox<>(CondicionDevolucion.values())));
         add(new JScrollPane(tabla), BorderLayout.CENTER);
@@ -87,7 +87,7 @@ public class DevolucionView extends JPanel {
         OperacionModulo.ejecutar(this, controller::listarPrestamosPendientes, lista -> {
             prestamos.removeAllItems();
             for (PrestamoPendiente p : lista) prestamos.addItem(p);
-            estado.setText(lista.isEmpty() ? "No hay préstamos con equipos pendientes." : "Seleccione equipos y su condición.");
+            estado.setText(lista.isEmpty() ? "No hay equipos pendientes de devolución." : "Seleccione equipos y su condición.");
         }, () -> { ocupado(false); cargarPendientes(); });
     }
 
@@ -100,7 +100,7 @@ public class DevolucionView extends JPanel {
             pendientes = List.copyOf(lista);
             for (Pendiente d : lista) modelo.addRow(new Object[]{false, d.equipo().getCodigoInventario(),
                     d.equipo().getNombre(), CondicionDevolucion.BUENO});
-            estado.setText(lista.size() + " equipo(s) pendiente(s). Fecha de devolución: fecha del sistema.");
+            estado.setText(lista.isEmpty() ? "No hay equipos pendientes de devolución." : lista.size() + " equipo(s) pendiente(s). Fecha de devolución: fecha del sistema.");
         }, () -> ocupado(false));
     }
 

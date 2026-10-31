@@ -45,6 +45,11 @@ public class AutenticacionService {
     public record Sesion(Usuario usuario, Set<Modulo> menu, String nombreRol) { }
 
     public Sesion autenticar(String username, String password) {
+        return autenticar(username, password, () -> { });
+    }
+
+    /** Notificación de presentación; las validaciones y su orden permanecen iguales. */
+    public Sesion autenticar(String username, String password, Runnable antesDeVerificarRostro) {
         // UsuarioService ya registra los fallos de credenciales; no duplicarlos aquí.
         Usuario usuario = usuarios.autenticar(username, password);
         Rol rol;
@@ -56,6 +61,7 @@ public class AutenticacionService {
                 throw new BusinessException("El usuario no está activo");
             }
             resolverRol(usuario);
+            antesDeVerificarRostro.run();
             if (!facial.verificar(usuario.getIdUsuario())) {
                 throw new BusinessException("La verificación facial no fue satisfactoria. Acceso denegado.");
             }

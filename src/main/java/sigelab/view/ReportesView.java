@@ -1,6 +1,10 @@
 package sigelab.view;
 
 import sigelab.controller.ReporteController;
+import sigelab.controller.CatalogoSeleccionController;
+import sigelab.service.Modulo;
+import sigelab.service.CatalogoSeleccionService.EquipoOpcion;
+import sigelab.view.ui.*;
 import sigelab.enums.EstadoEquipo;
 import sigelab.enums.EstadoMantenimiento;
 import sigelab.exception.BusinessException;
@@ -25,8 +29,12 @@ public class ReportesView extends JPanel {
             "Préstamos", "Préstamos por fechas", "Historial de equipos", "Historial de un equipo", "Historial de mantenimientos"});
     private final JComboBox<EstadoEquipo> equipos = new JComboBox<>(EstadoEquipo.values());
     private final JComboBox<EstadoMantenimiento> mantenimientos = new JComboBox<>(EstadoMantenimiento.values());
-    private final JLabel etiquetaCodigo = new JLabel("Código de inventario:");
-    private final JTextField codigoInventario = new JTextField(15);
+    private final JLabel etiquetaCodigo = new JLabel("Equipo:");
+    private final SelectorBuscable<EquipoOpcion> selectorEquipo = new SelectorBuscable<>(
+            "Buscar equipo por código, nombre o marca", EquipoOpcion::toString, EquipoOpcion::busqueda);
+    private final CatalogoSeleccionController catalogos;
+    private final JButton actualizarEquipos = new JButton("Actualizar equipos");
+    private final JPanel filtroFechas = new JPanel(new FlowLayout(FlowLayout.LEFT));
     private final JPanel filtroEquipo = new JPanel(new FlowLayout(FlowLayout.LEFT));
     private final JTextField desde = new JTextField(10);
     private final JTextField hasta = new JTextField(10);
@@ -40,25 +48,50 @@ public class ReportesView extends JPanel {
     };
 
     public ReportesView(Usuario usuario) {
-        controller = new ReporteController(usuario);
+        this(new ReporteController(usuario), new CatalogoSeleccionController(usuario.getIdUsuario(), Modulo.REPORTES_QR));
+    }
+
+    ReportesView(ReporteController controller, CatalogoSeleccionController catalogos) {
+        this.controller = controller;
+        this.catalogos = catalogos;
         setLayout(new BorderLayout(10, 10));
         JPanel filtros = new JPanel(new FlowLayout(FlowLayout.LEFT));
-        for (Component componente : new Component[]{tipo, equipos, mantenimientos,
-                new JLabel("Desde (AAAA-MM-DD):"), desde, new JLabel("Hasta:"), hasta, consultar}) {
+        for (Component componente : new Component[]{tipo, equipos, mantenimientos, consultar}) {
             filtros.add(componente);
         }
         consultar.addActionListener(e -> cargar());
         tipo.addActionListener(e -> filtros());
         filtroEquipo.add(etiquetaCodigo);
-        filtroEquipo.add(codigoInventario);
+        filtroEquipo.add(selectorEquipo);
+        filtroEquipo.add(actualizarEquipos);
+        actualizarEquipos.addActionListener(e -> cargarEquipos());
+        desde.setText(LocalDate.now().withDayOfMonth(1).toString());
+        hasta.setText(LocalDate.now().toString());
+        desde.putClientProperty("JTextField.placeholderText", "AAAA-MM-DD");
+        hasta.putClientProperty("JTextField.placeholderText", "AAAA-MM-DD");
         JPanel cabecera = new JPanel(new BorderLayout());
         cabecera.add(filtros, BorderLayout.NORTH);
-        cabecera.add(filtroEquipo, BorderLayout.SOUTH);
+        filtroFechas.add(new JLabel("Desde (AAAA-MM-DD):")); filtroFechas.add(desde);
+        filtroFechas.add(new JLabel("Hasta (AAAA-MM-DD):")); filtroFechas.add(hasta);
+        JPanel detalles = new JPanel(); detalles.setLayout(new BoxLayout(detalles, BoxLayout.Y_AXIS));
+        detalles.add(filtroFechas); detalles.add(filtroEquipo);
+        cabecera.add(detalles, BorderLayout.SOUTH);
         add(cabecera, BorderLayout.NORTH);
-        add(new JScrollPane(new JTable(modelo)), BorderLayout.CENTER);
+        JTable tabla = new JTable(modelo);
+        UiTheme.tabla(tabla); tabla.setAutoCreateRowSorter(true);
+        tabla.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
+        add(new JScrollPane(tabla), BorderLayout.CENTER);
         add(resumen, BorderLayout.SOUTH);
         filtros();
         cargar();
+        cargarEquipos();
+    }
+
+    private void cargarEquipos() {
+        actualizarEquipos.setEnabled(false); selectorEquipo.setEnabled(false);
+        actualizarEquipos.setText("Cargando...");
+        OperacionModulo.ejecutar(this, () -> catalogos.listarEquipos(false), selectorEquipo::valores,
+                () -> { actualizarEquipos.setEnabled(true); selectorEquipo.setEnabled(true); actualizarEquipos.setText("Actualizar equipos"); });
     }
 
     private void filtros() {
@@ -66,6 +99,7 @@ public class ReportesView extends JPanel {
         equipos.setVisible("Equipos por estado".equals(reporte));
         mantenimientos.setVisible("Historial de mantenimientos".equals(reporte));
         filtroEquipo.setVisible("Historial de un equipo".equals(reporte));
+        filtroFechas.setVisible("Préstamos por fechas".equals(reporte));
         desde.setEnabled("Préstamos por fechas".equals(reporte));
         hasta.setEnabled(desde.isEnabled());
     }
@@ -74,20 +108,26 @@ public class ReportesView extends JPanel {
         String reporte = (String) tipo.getSelectedItem();
         EstadoEquipo estadoEquipo = (EstadoEquipo) equipos.getSelectedItem();
         EstadoMantenimiento estadoMantenimiento = (EstadoMantenimiento) mantenimientos.getSelectedItem();
-        String codigo = codigoInventario.getText();
+        EquipoOpcion elegido = selectorEquipo.seleccionado();
+        if ("Historial de un equipo".equals(reporte) && elegido == null) { resumen.setText("Selecciona un equipo de la lista."); return; }
+        String codigo = elegido == null ? null : elegido.equipo().getCodigoInventario();
         LocalDate inicio;
         LocalDate fin;
         try {
             inicio = "Préstamos por fechas".equals(reporte) ? LocalDate.parse(desde.getText().trim()) : null;
             fin = "Préstamos por fechas".equals(reporte) ? LocalDate.parse(hasta.getText().trim()) : null;
         } catch (DateTimeParseException e) {
-            JOptionPane.showMessageDialog(this, "Ingresa las fechas con formato AAAA-MM-DD.",
-                    "Reportes", JOptionPane.ERROR_MESSAGE);
+            desde.putClientProperty("JComponent.outline", "error"); hasta.putClientProperty("JComponent.outline", "error");
+            resumen.setText("Ingresa fechas válidas con formato AAAA-MM-DD.");
             return;
         }
+        if (inicio != null && inicio.isAfter(fin)) {
+            hasta.putClientProperty("JComponent.outline", "error"); resumen.setText("La fecha Hasta debe ser igual o posterior a Desde."); return;
+        }
+        desde.putClientProperty("JComponent.outline", null); hasta.putClientProperty("JComponent.outline", null);
         tipo.setEnabled(false);
         consultar.setEnabled(false);
-        resumen.setText("Consultando...");
+        resumen.setText("Cargando...");
         new SwingWorker<List<Map<String, Object>>, Void>() {
             @Override
             protected List<Map<String, Object>> doInBackground() {
@@ -111,7 +151,7 @@ public class ReportesView extends JPanel {
                     List<Map<String, Object>> filas = get();
                     mostrar(filas);
                     resumen.setText(filas.isEmpty()
-                            ? ("Historial de un equipo".equals(reporte) ? "El equipo no tiene historial de préstamos/devoluciones." : "Sin resultados.")
+                            ? ("Historial de un equipo".equals(reporte) ? "El equipo no tiene historial de préstamos/devoluciones." : "No se encontraron resultados.")
                             : filas.size() + " resultados.");
                 } catch (InterruptedException e) {
                     Thread.currentThread().interrupt();
@@ -148,8 +188,13 @@ public class ReportesView extends JPanel {
             modelo.addColumn("Resultado");
             return;
         }
-        List<String> columnas = new ArrayList<>(filas.getFirst().keySet());
-        columnas.forEach(nombre -> modelo.addColumn(nombre.replace('_', ' ')));
+        List<String> columnas = filas.getFirst().keySet().stream().filter(c -> !c.toLowerCase(java.util.Locale.ROOT).startsWith("id_")).toList();
+        columnas.forEach(nombre -> modelo.addColumn(switch (nombre) {
+            case "codigo_inventario" -> "Código";
+            case "nombre_equipo" -> "Equipo";
+            case "fecha_esperada_devolucion" -> "Fecha esperada";
+            default -> nombre.replace('_', ' ');
+        }));
         for (Map<String, Object> fila : filas) {
             modelo.addRow(columnas.stream().map(fila::get).toArray());
         }

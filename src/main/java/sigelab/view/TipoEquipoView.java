@@ -8,7 +8,7 @@ import javax.swing.table.DefaultTableModel;
 import java.awt.*;
 import java.util.List;
 
-public class TipoEquipoView extends JFrame {
+public class TipoEquipoView extends JPanel {
 
     private final TipoEquipoController controller;
 
@@ -29,19 +29,19 @@ public class TipoEquipoView extends JFrame {
 
         this.controller = new TipoEquipoController();
 
-        configurarVentana();
+        configurarPanel();
         crearComponentes();
         cargarTipos();
     }
 
 
-    // Configuración general de la ventana.
-    private void configurarVentana() {
+    /** Actualiza la lista al volver a la tarjeta sin recrear el formulario. */
+    public void refrescar() {
+        cargarTipos();
+    }
 
-        setTitle("SIGELAB - Tipos de Equipo");
-        setSize(700, 500);
-        setLocationRelativeTo(null);
-        setDefaultCloseOperation(JFrame.DISPOSE_ON_CLOSE);
+    private void configurarPanel() {
+
         setLayout(new BorderLayout(10, 10));
     }
 

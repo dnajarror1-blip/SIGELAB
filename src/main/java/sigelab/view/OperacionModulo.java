@@ -16,14 +16,16 @@ final class OperacionModulo {
             protected T doInBackground() throws Exception { return tarea.call(); }
             protected void done() {
                 try {
-                    completada.accept(get());
+                    T resultado = get();
+                    if (!(vista instanceof java.awt.Window ventana) || ventana.isDisplayable()) completada.accept(resultado);
                 } catch (InterruptedException e) {
                     Thread.currentThread().interrupt();
                 } catch (ExecutionException e) {
                     String mensaje = e.getCause() instanceof BusinessException
                             ? e.getCause().getMessage()
                             : "No se pudo completar la operación. Compruebe su estado antes de reintentar.";
-                    JOptionPane.showMessageDialog(vista, mensaje, "SIGELAB", JOptionPane.ERROR_MESSAGE);
+                    if (!(vista instanceof java.awt.Window ventana) || ventana.isDisplayable())
+                        JOptionPane.showMessageDialog(vista, mensaje, "SIGELAB", JOptionPane.ERROR_MESSAGE);
                 } finally {
                     terminada.run();
                 }

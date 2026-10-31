@@ -277,6 +277,9 @@ public class UsuariosPanel extends JPanel {
                 ? EstadoUsuario.INACTIVO
                 : EstadoUsuario.ACTIVO;
 
+        if (nuevo == EstadoUsuario.INACTIVO && JOptionPane.showConfirmDialog(this,
+                "¿Desactivar a " + u.getNombre() + " " + u.getApellido() + "? No podrá iniciar sesión.",
+                "Desactivar usuario", JOptionPane.YES_NO_OPTION) != JOptionPane.YES_OPTION) return;
         var respuesta = controller.cambiarEstado(u.getIdUsuario(), nuevo);
         mostrarMensaje(respuesta.mensaje(), !respuesta.exito());
         cargarTabla();

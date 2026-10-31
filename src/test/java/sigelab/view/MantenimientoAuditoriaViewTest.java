@@ -28,7 +28,9 @@ class MantenimientoAuditoriaViewTest {
         MantenimientoController controller = new MantenimientoController(null,null,42) {
             public List<Mantenimiento> listarTodos() { consulta(); return List.of(m); }
         };
-        verificar(() -> new MantenimientoView(controller),10);
+        verificar(() -> new MantenimientoView(controller, new CatalogoSeleccionController(42,sigelab.service.Modulo.MANTENIMIENTO,null,null) {
+            public List<sigelab.service.CatalogoSeleccionService.EquipoOpcion> listarEquipos(boolean disponibles) { consulta(); return List.of(); }
+        }),10);
     }
     @Test void auditoriaAbreYCargaFueraDelEdt() throws Exception {
         Auditoria a = new Auditoria(); a.setIdAuditoria(11); a.setAccion("LOGIN_EXITOSO");

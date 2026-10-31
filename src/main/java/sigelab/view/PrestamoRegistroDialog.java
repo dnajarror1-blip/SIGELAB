@@ -15,6 +15,11 @@ import javax.swing.border.EmptyBorder;
 import javax.swing.filechooser.FileNameExtensionFilter;
 
 import sigelab.controller.PrestamoController;
+import sigelab.controller.CatalogoSeleccionController;
+import sigelab.service.CatalogoSeleccionService.*;
+import sigelab.service.Modulo;
+import sigelab.view.ui.SelectorBuscable;
+import sigelab.view.ui.UiTheme;
 import sigelab.enums.EstadoPrestamo;
 import sigelab.exception.BusinessException;
 import sigelab.model.Equipo;
@@ -22,12 +27,12 @@ import sigelab.model.Prestamo;
 
 public class PrestamoRegistroDialog extends JDialog {
 
-    private static final Color FONDO = new Color(242, 245, 249);
-    private static final Color MARINO = new Color(24, 42, 65);
-    private static final Color PETROLEO = new Color(20, 105, 103);
-    private static final Color TEXTO = new Color(38, 52, 70);
-    private static final Color SUAVE = new Color(100, 116, 139);
-    private static final Color BORDE = new Color(218, 225, 234);
+    private static final Color FONDO = UiTheme.FONDO;
+    private static final Color MARINO = UiTheme.LATERAL;
+    private static final Color PETROLEO = UiTheme.ACENTO;
+    private static final Color TEXTO = UiTheme.TEXTO;
+    private static final Color SUAVE = UiTheme.SECUNDARIO;
+    private static final Color BORDE = UiTheme.BORDE;
 
     private static final Font FUENTE =
             new Font("Segoe UI", Font.PLAIN, 13);
@@ -35,12 +40,14 @@ public class PrestamoRegistroDialog extends JDialog {
     private final PrestamoController controller;
     private final int idUsuarioActual;
 
-    private final JTextField txtSolicitante = new JTextField();
+    private final SelectorBuscable<Solicitante> solicitante = new SelectorBuscable<>(
+            "Buscar solicitante por nombre o usuario", Solicitante::nombre, Solicitante::nombre);
+    private final CatalogoSeleccionController catalogos;
     private final JTextField txtFechaPrestamo =
             new JTextField(LocalDate.now().toString());
     private final JTextField txtFechaDevolucion =
             new JTextField(LocalDate.now().plusDays(3).toString());
-    private final JTextField txtEquipos = new JTextField();
+    private final SeleccionEquiposPanel seleccionEquipos = new SeleccionEquiposPanel();
     private final JTextArea txtObservaciones = new JTextArea(4, 30);
 
     private final JButton btnGuardar =
@@ -51,6 +58,9 @@ public class PrestamoRegistroDialog extends JDialog {
 
     private final JLabel lblEstado = new JLabel("Completa los datos del préstamo.");
 
+    private final JButton btnActualizarListas = new JButton("Actualizar listas");
+    private boolean catalogosListos;
+    private boolean cargandoListas;
     private boolean registrado;
     private boolean ocupado;
     private boolean resultadoIncierto;
@@ -68,8 +78,10 @@ public class PrestamoRegistroDialog extends JDialog {
 
         this.controller = controller;
         this.idUsuarioActual = idUsuarioActual;
+        this.catalogos = new CatalogoSeleccionController(idUsuarioActual, Modulo.RESERVAS_PRESTAMOS);
 
         inicializarComponentes();
+        cargarSelectores();
     }
 
     private void inicializarComponentes() {
@@ -107,10 +119,10 @@ public class PrestamoRegistroDialog extends JDialog {
                 )
         );
 
-        prepararCampo(txtSolicitante);
+
         prepararCampo(txtFechaPrestamo);
         prepararCampo(txtFechaDevolucion);
-        prepararCampo(txtEquipos);
+
 
         GridBagConstraints gbc = new GridBagConstraints();
         gbc.gridx = 0;
@@ -121,8 +133,8 @@ public class PrestamoRegistroDialog extends JDialog {
         int fila = 0;
 
         agregarFila(formulario, gbc, fila++,
-                etiqueta("Usuario solicitante · ID"));
-        agregarFila(formulario, gbc, fila++, txtSolicitante);
+                etiqueta("Solicitante"));
+        agregarFila(formulario, gbc, fila++, solicitante);
 
         JPanel fechas = new JPanel(new GridLayout(1, 2, 14, 0));
         fechas.setOpaque(false);
@@ -134,18 +146,13 @@ public class PrestamoRegistroDialog extends JDialog {
         ayudaFechas.setForeground(SUAVE);
         agregarFila(formulario, gbc, fila++, ayudaFechas);
 
-        agregarFila(formulario, gbc, fila++,
-                etiqueta("Equipos · IDs separados por comas"));
-        agregarFila(formulario, gbc, fila++, txtEquipos);
-
-        JLabel ayudaEquipos = etiqueta(
-                "Ejemplo: 5, 6. Para quitar un equipo, borra su ID de la lista."
-        );
-        ayudaEquipos.setForeground(SUAVE);
-        agregarFila(formulario, gbc, fila++, ayudaEquipos);
+        agregarFila(formulario, gbc, fila++, seleccionEquipos);
 
         estilizarBoton(btnQr, Color.WHITE, PETROLEO);
-        agregarFila(formulario, gbc, fila++, btnQr);
+        JPanel opcionesEquipo = new JPanel(new FlowLayout(FlowLayout.LEFT));
+        opcionesEquipo.add(btnQr); opcionesEquipo.add(btnActualizarListas);
+        btnActualizarListas.addActionListener(e -> cargarSelectores());
+        agregarFila(formulario, gbc, fila++, opcionesEquipo);
 
         agregarFila(formulario, gbc, fila++,
                 etiqueta("Observaciones · máximo 250 caracteres"));
@@ -160,6 +167,7 @@ public class PrestamoRegistroDialog extends JDialog {
         observaciones.setBorder(BorderFactory.createLineBorder(BORDE));
         agregarFila(formulario, gbc, fila, observaciones);
 
+        UiTheme.aplicar(formulario);
         JScrollPane scrollFormulario = new JScrollPane(formulario);
         scrollFormulario.setBorder(BorderFactory.createEmptyBorder());
         scrollFormulario.getViewport().setBackground(Color.WHITE);
@@ -203,8 +211,8 @@ public class PrestamoRegistroDialog extends JDialog {
         int altoDisponible = pantalla.height - margenes.top - margenes.bottom;
 
         setSize(
-                Math.min(640, anchoDisponible),
-                Math.min(720, altoDisponible)
+                Math.min(1000, anchoDisponible),
+                Math.min(850, altoDisponible)
         );
         setLocationRelativeTo(getOwner());
     }
@@ -252,6 +260,8 @@ public class PrestamoRegistroDialog extends JDialog {
             Color fondo,
             Color texto
     ) {
+        if (fondo.equals(Color.WHITE)) UiTheme.botonSecundario(boton);
+        else UiTheme.botonPrimario(boton);
         boton.setFont(FUENTE.deriveFont(Font.BOLD));
         boton.setBackground(fondo);
         boton.setForeground(texto);
@@ -269,32 +279,33 @@ public class PrestamoRegistroDialog extends JDialog {
         );
     }
 
-    private List<Integer> leerIdsEquipo() {
-        List<Integer> ids = new ArrayList<>();
-        String texto = txtEquipos.getText().trim();
-
-        if (!texto.isEmpty()) {
-            for (String valor : texto.split(",", -1)) {
-                int id = Integer.parseInt(valor.trim());
-
-                if (id <= 0) {
-                    throw new NumberFormatException();
-                }
-
-                ids.add(id);
-            }
-        }
-
-        return ids;
+    private void cargarSelectores() {
+        cargandoListas = true;
+        cambiarEstadoGuardado(true);
+        lblEstado.setText("Cargando solicitantes y equipos...");
+        btnCancelar.setEnabled(true);
+        OperacionModulo.ejecutar(this, () -> new Catalogos(catalogos.listarSolicitantesActivos(), catalogos.listarEquipos(true)), datos -> {
+            catalogosListos = true;
+            solicitante.valores(datos.solicitantes());
+            seleccionEquipos.disponibles(datos.equipos());
+            lblEstado.setText(datos.solicitantes().isEmpty() ? "No hay solicitantes activos." : "Selecciona solicitante y equipos.");
+        }, () -> {
+            cargandoListas = false;
+            cambiarEstadoGuardado(false);
+            if (lblEstado.getText().startsWith("Cargando")) lblEstado.setText("No se pudo cargar. Pulsa Actualizar listas.");
+        });
     }
+
+    private record Catalogos(List<Solicitante> solicitantes, List<EquipoOpcion> equipos) { }
 
     private void registrarPrestamo() {
         final Prestamo prestamo;
         final List<Integer> idsEquipo;
 
         try {
-            int idSolicitante =
-                    Integer.parseInt(txtSolicitante.getText().trim());
+            Solicitante elegido = solicitante.seleccionado();
+            if (elegido == null) { mostrarAviso("Selecciona un solicitante de la lista."); return; }
+            int idSolicitante = elegido.idUsuario();
 
             LocalDate fechaPrestamo =
                     LocalDate.parse(txtFechaPrestamo.getText().trim());
@@ -302,7 +313,7 @@ public class PrestamoRegistroDialog extends JDialog {
             LocalDate fechaDevolucion =
                     LocalDate.parse(txtFechaDevolucion.getText().trim());
 
-            idsEquipo = leerIdsEquipo();
+            idsEquipo = seleccionEquipos.ids();
             if (idsEquipo.isEmpty()) {
                 mostrarAviso("El préstamo debe incluir al menos un equipo.");
                 return;
@@ -320,13 +331,6 @@ public class PrestamoRegistroDialog extends JDialog {
                     EstadoPrestamo.ACTIVO,
                     txtObservaciones.getText().trim()
             );
-
-        } catch (NumberFormatException e) {
-            mostrarAviso(
-                    "Escribe un solicitante válido y equipos con IDs "
-                            + "enteros positivos separados por comas."
-            );
-            return;
 
         } catch (DateTimeParseException e) {
             mostrarAviso(
@@ -392,18 +396,6 @@ public class PrestamoRegistroDialog extends JDialog {
     }
 
     private void agregarEquipoDesdeQr() {
-        final List<Integer> equiposActuales;
-
-        try {
-            equiposActuales = leerIdsEquipo();
-
-        } catch (NumberFormatException e) {
-            mostrarAviso(
-                    "Corrige los IDs de equipos antes de agregar uno desde QR."
-            );
-            return;
-        }
-
         JFileChooser selector = new JFileChooser();
         selector.setLocale(Locale.forLanguageTag("es-GT"));
         selector.updateUI();
@@ -427,18 +419,21 @@ public class PrestamoRegistroDialog extends JDialog {
         cambiarEstadoGuardado(true);
         lblEstado.setText("Leyendo QR y consultando equipo...");
 
-        new SwingWorker<Equipo, Void>() {
+        new SwingWorker<EquipoOpcion, Void>() {
             @Override
-            protected Equipo doInBackground() {
-                return controller.identificarEquipoPorQr(imagen);
+            protected EquipoOpcion doInBackground() {
+                Equipo encontrado = controller.identificarEquipoPorQr(imagen);
+                return catalogos.listarEquipos(true).stream().filter(e -> e.equipo().getIdEquipo().equals(encontrado.getIdEquipo()))
+                        .findFirst().orElse(new EquipoOpcion(encontrado, "—", "—"));
             }
 
             @Override
             protected void done() {
                 try {
-                    Equipo equipo = get();
+                    EquipoOpcion opcion = get();
+                    Equipo equipo = opcion.equipo();
 
-                    if (equiposActuales.contains(equipo.getIdEquipo())) {
+                    if (seleccionEquipos.ids().contains(equipo.getIdEquipo())) {
                         lblEstado.setText("El equipo ya estaba agregado.");
                         mostrarAviso(
                                 "Ese equipo ya está incluido en el préstamo."
@@ -451,13 +446,7 @@ public class PrestamoRegistroDialog extends JDialog {
                         return;
                     }
 
-                    equiposActuales.add(equipo.getIdEquipo());
-
-                    txtEquipos.setText(
-                            equiposActuales.stream()
-                                    .map(String::valueOf)
-                                    .collect(Collectors.joining(", "))
-                    );
+                    seleccionEquipos.agregar(opcion);
 
                     lblEstado.setText(
                             "Equipo agregado: " + equipo.getCodigoInventario()
@@ -492,7 +481,6 @@ public class PrestamoRegistroDialog extends JDialog {
         JPanel datos = new JPanel(new GridLayout(0, 2, 12, 8));
         datos.setBackground(Color.WHITE);
 
-        agregarDato(datos, "ID del equipo", equipo.getIdEquipo());
         agregarDato(datos, "Código de inventario", equipo.getCodigoInventario());
         agregarDato(datos, "Nombre", equipo.getNombre());
         agregarDato(datos, "Marca", equipo.getMarca());
@@ -611,21 +599,21 @@ public class PrestamoRegistroDialog extends JDialog {
         ocupado = enProceso;
         boolean permitirEdicion = !enProceso && !resultadoIncierto;
 
-        btnGuardar.setEnabled(permitirEdicion);
+        btnGuardar.setEnabled(permitirEdicion && catalogosListos);
+        btnActualizarListas.setEnabled(!enProceso);
         btnQr.setEnabled(permitirEdicion);
         btnCancelar.setEnabled(!enProceso);
 
-        txtSolicitante.setEnabled(permitirEdicion);
+        solicitante.setEnabled(permitirEdicion);
         txtFechaPrestamo.setEnabled(permitirEdicion);
         txtFechaDevolucion.setEnabled(permitirEdicion);
-        txtEquipos.setEnabled(permitirEdicion);
+        seleccionEquipos.setEnabled(permitirEdicion);
         txtObservaciones.setEnabled(permitirEdicion);
     }
 
     private void cerrarSiEsPosible() {
-        if (!ocupado) {
-            dispose();
-        }
+        if ((!ocupado || cargandoListas) && JOptionPane.showConfirmDialog(this, "¿Cerrar el formulario sin registrar el préstamo?",
+                "Cancelar registro", JOptionPane.YES_NO_OPTION) == JOptionPane.YES_OPTION) dispose();
     }
 
     private void mostrarAviso(String mensaje) {

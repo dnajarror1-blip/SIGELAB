@@ -34,8 +34,16 @@ public class LoginController {
 
     // La pantalla llama a este método cuando el usuario presiona "Entrar"
     public ResultadoLogin iniciarSesion(String username, String password) {
+        return resultado(() -> autenticacion.autenticar(username, password));
+    }
+
+    public ResultadoLogin iniciarSesion(String username, String password, Runnable antesDeVerificarRostro) {
+        return resultado(() -> autenticacion.autenticar(username, password, antesDeVerificarRostro));
+    }
+
+    private ResultadoLogin resultado(java.util.function.Supplier<AutenticacionService.Sesion> autenticar) {
         try {
-            var sesion = autenticacion.autenticar(username, password);
+            var sesion = autenticar.get();
             return new ResultadoLogin(true, "Bienvenido " + sesion.usuario().getNombre(),
                     sesion.usuario(), sesion.menu(), sesion.nombreRol());
 
