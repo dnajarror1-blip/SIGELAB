@@ -70,6 +70,17 @@ public class AuditService {
         }
     }
 
+    /** Auditoría obligatoria: el repositorio administra y cierra su propia conexión. */
+    public void registrarObligatorio(Integer idUsuario, String accion, String entidad,
+                                     Integer idRegistro, String descripcion) {
+        try {
+            auditoriaRepository.guardar(new Auditoria(idUsuario, LocalDateTime.now(),
+                    accion, entidad, idRegistro, descripcion));
+        } catch (SQLException | DataAccessException | sigelab.exception.DatabaseConfigurationException error) {
+            throw new DataAccessException("No se pudo registrar la auditoría obligatoria. Acceso denegado.", error);
+        }
+    }
+
     /**
      * Registra un evento de auditoría dentro de una transacción existente.
      *

@@ -15,7 +15,7 @@ import static org.junit.jupiter.api.Assertions.*;
 class AutenticacionServiceTest {
     private final List<String> pasos = new ArrayList<>();
     private final Usuario usuario = new Usuario();
-    private boolean passwordValido = true, disponible = true;
+    private boolean passwordValido = true, disponible = true, falloAudit;
     private final UsuarioService usuarios = new UsuarioService() {
         @Override public Usuario autenticar(String username, String password) {
             pasos.add("password");
@@ -30,8 +30,9 @@ class AutenticacionServiceTest {
         }
     };
     private final AuditService auditoria = new AuditService() {
-        @Override public void registrar(Integer actor, String accion, String entidad, Integer id, String detalle) {
+        @Override public void registrarObligatorio(Integer actor, String accion, String entidad, Integer id, String detalle) {
             assertFalse(detalle.contains("secreto")); pasos.add(accion);
+            if (falloAudit) throw new sigelab.exception.DataAccessException("Fallo controlado");
         }
     };
     AutenticacionServiceTest() {
@@ -56,6 +57,18 @@ class AutenticacionServiceTest {
         assertTrue(resultado.exito());
         assertEquals(List.of("password", "facial", "revalidar", "LOGIN_EXITOSO"), pasos);
         assertEquals("ADMIN", resultado.nombreRol());
+    }
+    @Test void facialCorrectoSinAuditoriaNoCreaSesionNiDuplicaEventos() {
+        falloAudit = true;
+        var resultado = controller(id -> true).iniciarSesion("ana", "secreto");
+        assertFalse(resultado.exito()); assertNull(resultado.usuario()); assertTrue(resultado.menu().isEmpty());
+        assertEquals(List.of("password", "revalidar", "LOGIN_EXITOSO"), pasos);
+    }
+    @Test void falloAuditoriaDeRostroIncorrectoNoCreaSesion() {
+        falloAudit = true;
+        var resultado = controller(id -> false).iniciarSesion("ana", "secreto");
+        assertFalse(resultado.exito()); assertNull(resultado.usuario());
+        assertEquals(List.of("password", "LOGIN_FALLIDO"), pasos);
     }
     @Test void rostroDistintoDeniegaYAUDITA() {
         var resultado = controller(id -> false).iniciarSesion("ana", "secreto");

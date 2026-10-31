@@ -38,13 +38,14 @@ class UsuarioAuditoriaTest {
         public void validarAcceso(Connection c, int actor, Modulo modulo) {
             assertSame(conn,c); assertEquals(42,actor); assertEquals(Modulo.USUARIOS,modulo);
         }
-        public void registrar(Integer actor, String accion, String entidad, Integer id, String descripcion) {
+        public void registrarObligatorio(Integer actor, String accion, String entidad, Integer id, String descripcion) {
             assertEquals("Usuario", entidad); assertFalse(descripcion.contains("clave123"));
             assertFalse(descripcion.contains("$2a$")); acciones.add(accion);
+            if (falloAudit) throw new DataAccessException("Fallo simulado");
         }
         public void registrar(Integer actor, String accion, String entidad, Integer id, String descripcion, Connection c) {
             assertSame(conn,c); assertEquals(42,actor); assertEquals(7,id);
-            registrar(actor,accion,entidad,id,descripcion);
+            registrarObligatorio(actor,accion,entidad,id,descripcion);
             if (falloAudit) throw new DataAccessException("Fallo simulado");
         }
     }, () -> conn);
@@ -63,6 +64,11 @@ class UsuarioAuditoriaTest {
         assertThrows(BusinessException.class, () -> service.autenticar(caso.equals("vacio") ? "" : "ana",
                 caso.equals("password") ? "incorrecta" : "clave123"));
         assertEquals(List.of("LOGIN_FALLIDO"),acciones);
+    }
+    @Test void falloAuditoriaDePasswordIncorrectoDeniegaConErrorControlado() {
+        falloAudit = true;
+        assertThrows(DataAccessException.class, () -> service.autenticar("ana", "incorrecta"));
+        assertEquals(List.of("LOGIN_FALLIDO"), acciones);
     }
     @Test void desactivarEsAtomicoConActorYReferencia() {
         service.cambiarEstado(7,EstadoUsuario.INACTIVO,42);

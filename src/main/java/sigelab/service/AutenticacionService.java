@@ -22,7 +22,12 @@ public class AutenticacionService {
     public AutenticacionService(UsuarioService usuarios, PermisoService permisos) {
         this(usuarios, permisos, id -> {
             try {
-                return FacialAuthClient.desdeEntorno().verificar(id).matched();
+                var cliente = FacialAuthClient.desdeEntorno();
+                var perfil = cliente.consultarPerfil(id);
+                if (!perfil.registrado() || !perfil.activo()) {
+                    throw new BusinessException("Debe registrar un rostro activo con un administrador. Acceso denegado.");
+                }
+                return cliente.verificar(id).matched();
             } catch (FacialAuthClient.ErrorComunicacion | IllegalArgumentException error) {
                 throw new BusinessException("La verificación facial no está disponible. Acceso denegado.");
             }
@@ -42,6 +47,9 @@ public class AutenticacionService {
     public Sesion autenticar(String username, String password) {
         // UsuarioService ya registra los fallos de credenciales; no duplicarlos aquí.
         Usuario usuario = usuarios.autenticar(username, password);
+        Rol rol;
+        Usuario actual;
+        Set<Modulo> menu;
         try {
             if (usuario.getEstado() != EstadoUsuario.ACTIVO || usuario.getIdUsuario() == null
                     || usuario.getIdUsuario() <= 0) {
@@ -51,21 +59,22 @@ public class AutenticacionService {
             if (!facial.verificar(usuario.getIdUsuario())) {
                 throw new BusinessException("La verificación facial no fue satisfactoria. Acceso denegado.");
             }
-            Usuario actual = usuarios.revalidarUsuarioActivo(usuario.getIdUsuario());
-            Rol rol = resolverRol(actual);
-            Set<Modulo> menu = permisos.modulosDe(rol);
-            auditoria.registrar(actual.getIdUsuario(), "LOGIN_EXITOSO", "Usuario", actual.getIdUsuario(),
-                    "Contraseña y verificación facial satisfactorias.");
-            return new Sesion(actual, menu, rol.getNombre());
+            actual = usuarios.revalidarUsuarioActivo(usuario.getIdUsuario());
+            rol = resolverRol(actual);
+            menu = permisos.modulosDe(rol);
         } catch (BusinessException | DataAccessException | DatabaseConfigurationException error) {
-            auditoria.registrar(usuario.getIdUsuario(), "LOGIN_FALLIDO", "Usuario", usuario.getIdUsuario(),
+            auditoria.registrarObligatorio(usuario.getIdUsuario(), "LOGIN_FALLIDO", "Usuario", usuario.getIdUsuario(),
                     "Acceso denegado después de validar credenciales.");
             throw error;
         } catch (FacialAuthClient.ErrorComunicacion error) {
-            auditoria.registrar(usuario.getIdUsuario(), "LOGIN_FALLIDO", "Usuario", usuario.getIdUsuario(),
+            auditoria.registrarObligatorio(usuario.getIdUsuario(), "LOGIN_FALLIDO", "Usuario", usuario.getIdUsuario(),
                     "Servicio facial no disponible o respuesta inválida.");
             throw new BusinessException("La verificación facial no está disponible. Acceso denegado.");
         }
+        // Fuera del catch: un fallo de auditoría exitosa no genera un segundo evento.
+        auditoria.registrarObligatorio(actual.getIdUsuario(), "LOGIN_EXITOSO", "Usuario", actual.getIdUsuario(),
+                "Contraseña y verificación facial satisfactorias.");
+        return new Sesion(actual, menu, rol.getNombre());
     }
 
     private Rol resolverRol(Usuario usuario) {

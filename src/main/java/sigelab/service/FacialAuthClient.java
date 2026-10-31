@@ -36,9 +36,9 @@ public final class FacialAuthClient {
     private final IntConsumer autorizarAdmin;
 
     public static FacialAuthClient desdeEntorno() {
-        String url = System.getenv("FACIAL_API_URL");
+        String url = sigelab.config.LocalConfig.get("FACIAL_API_URL");
         return new FacialAuthClient(url == null || url.isBlank() ? "http://127.0.0.1:8765" : url,
-                System.getenv("FACIAL_API_KEY"));
+                sigelab.config.LocalConfig.get("FACIAL_API_KEY"));
     }
 
 

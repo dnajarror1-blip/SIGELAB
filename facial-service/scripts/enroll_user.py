@@ -89,8 +89,8 @@ def solicitar_enrollment(user_id):
 
 
 def main():
-    if sys.version_info[:2] != (3, 12):
-        print('Este bootstrap requiere Python 3.12. Prepare .venv con setup-facial-linux.sh.', file=sys.stderr)
+    if not (3, 12) <= sys.version_info[:2] <= (3, 14):
+        print('Este bootstrap requiere Python 3.12–3.14. Prepare .venv con setup-facial-linux.sh.', file=sys.stderr)
         return 2
     parser = argparse.ArgumentParser(description='Enrollment inicial de un ADMIN activo existente en SIGELAB; no inicia sesión.')
     selector = parser.add_mutually_exclusive_group(required=True)

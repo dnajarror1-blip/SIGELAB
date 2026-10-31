@@ -1,5 +1,9 @@
 # Integración facial de SIGELAB
 
+## Arranque vigente
+
+Seguir el [README](../README.md#arranque-desde-una-base-limpia-orden-obligatorio): BD existente → seed demo si falta → comprobar ADMIN demo existente → configurar Python 3.12–3.14/ODBC/claves/modelos → iniciar FastAPI → enrollment del ADMIN demo → comprobar GET /face/status/{id} → iniciar Java → probar login. El bootstrap **no crea usuarios**; solo registra el perfil de un ADMIN ACTIVO ya existente. Los resultados históricos al final de este documento no sustituyen la [matriz actual](MATRIZ_PRUEBAS.md).
+
 ## Arquitectura y límites
 
 Java Swing → LoginController → AutenticacionService → UsuarioService/Repository → JDBC → SQL Server.
@@ -11,49 +15,43 @@ No hay backend de sesiones, JWT ni firmas HMAC. La protección HTTP existente X-
 
 El cliente administrativo Java reconsulta actor ACTIVO y Rol.nombre=ADMIN. Python vuelve a comprobarlos antes de capturar y antes del commit. Esto valida al actor declarado contra la BD: **no constituye autenticación criptográfica de procesos locales**. Cualquier proceso local con acceso a la clave HTTP sigue dentro del límite de confianza académico.
 
-## Preparación Linux (comandos documentados, no ejecutados por Codex)
+## Primera ejecución
 
-1. Instalar **Python 3.12.x**, soporte venv y dependencias nativas de compilación/GUI de OpenCV según la distribución. Para InsightFace pueden requerirse compilador y cabeceras Python. Usar sesión gráfica y permisos de lectura sobre la cámara.
-2. Instalar unixODBC y Microsoft ODBC Driver 18 siguiendo las instrucciones de Microsoft para la distribución. `odbcinst -q -d` debe mostrar el driver configurado en DB_DRIVER. Verificar conectividad de red con la instancia SQL Server, puerto, usuario y permisos mediante herramientas locales autorizadas.
-3. Desde la raíz ejecutar `bash facial-service/setup-facial-linux.sh`. El script usa `python3.12` (o `PYTHON_BIN` apuntando a Python 3.12), valida su versión antes de crear .venv e instalar requirements-dev; requiere autorización para instalar y descargar. No copia ni sobrescribe .env. Si .venv ya existe con otra versión de Python, se detiene sin recrearla ni instalar dependencias. El operador debe revisar ese entorno y preparar uno nuevo con 3.12.
-4. Copiar manualmente `facial-service/.env.example` a `facial-service/.env` y completar DB_USER/DB_PASSWORD, FACIAL_API_KEY, FACIAL_ENCRYPTION_KEY y FACIAL_MATCH_THRESHOLD. El ejemplo no contiene secretos ni un umbral supuestamente calibrado. Las variables de entorno prevalecen sobre .env.
-5. Generar FACIAL_ENCRYPTION_KEY una sola vez como Base64 de 32 bytes aleatorios; FACIAL_API_KEY debe ser otra clave aleatoria de al menos 32 caracteres. Puede usarse Python secrets/base64 localmente. No pegar sus salidas en tickets, commits, logs o capturas. Conservar la clave AES de forma privada después del enrollment. Una clave diferente no descifra los perfiles previos; no se implementa rotación automática.
-6. En SIGELAB ya deben existir Usuario, Rol, PerfilFacial y AuditoriaFacial según `database/sigelab.sql`. No usar preparar_bd_face.py para la BD operativa: es una herramienta exclusiva de TEST_FACE. Si faltan tablas, revisar y ejecutar manualmente, con autorización, los bloques faciales oficiales sobre la base existente. No crear otra base ni otro Usuario. El servicio no ejecuta DDL ni migraciones.
-7. Desde facial-service ejecutar `.venv/bin/python scripts/doctor.py` para información de dependencias/configuración; no abre cámara ni consulta SQL. `--database` realiza SELECT reales, `--camera` abre y libera cámara, y `--model` carga el motor. Cada uno requiere autorización separada. La carga del modelo no demuestra por sí sola que liveness funcione: verificarlo en captura real autorizada.
-8. Coordinar con Integrante 8 la disponibilidad/licencia y versiones del modelo buffalo_l y del complemento liveness soportado por el motor existente. Se esperan modelos locales en facial-service/models y, si corresponde al motor, addons; no versionarlos. La carga del motor puede descargarlos si faltan. No se ha validado instalación ni descarga en esta estabilización.
-9. Iniciar con `bash facial-service/start-facial.sh`. Usa `.venv/bin/python -m uvicorn app.main:app --host 127.0.0.1 --port 8765 --workers 1`. No usar 0.0.0.0, múltiples workers ni --reload: la exclusión de cámara es por proceso.
-10. Configurar Java con FACIAL_API_URL=http://127.0.0.1:8765 y la misma FACIAL_API_KEY. Java lee variables del proceso, no el archivo .env de Python. No configurar FACIAL_ENCRYPTION_KEY en Java.
+1. Base SIGELAB existente: ejecutar `database/seed/003_datos_demo.sql` si faltan datos, con roles de 001/002 disponibles. No recrear BD. El seed solo inserta faltantes; un ADMIN demo preexistente inactivo o con otro rol debe revisarse, no se cambia automáticamente.
+2. Raíz del proyecto: `python3 facial-service/scripts/configure_local.py`. Contraseña oculta y archivos privados 0600. Preserva claves existentes; sin AES exige confirmar ausencia de perfiles antes de generarla. Si existen perfiles, recuperar clave original. Threshold inicial 0.50, no calibrado; liveness inicial 0.80.
+3. `bash facial-service/prepare-demo-linux.sh`. Reutiliza setup y doctor: Python/venv, requirements, ODBC Driver 18, configuración, SELECT de esquema/conexión, modelo y cámara. El motor puede descargar modelos/complemento al inicializarse; necesita red y permisos de disco. No modifica datos de negocio ni hace enrollment. `READY FOR DEMO` acredita preflight, no reconocimiento real.
+4. `bash facial-service/start-facial.sh`: valida configuración antes de Uvicorn en 127.0.0.1:8765, un worker, sin reload.
+5. Otra terminal: `bash facial-service/enroll-user.sh --username admin.demo`. Resuelve ADMIN ACTIVO por username; llama POST /face/enroll con la clave HTTP, sin crear usuarios ni pedir IDs. Si ya existe perfil, no repetir. GET /face/status/{id}, con la clave en cabecera configurada privadamente, permite confirmar registrado/activo. /health no acredita captura ni liveness.
+6. Ejecutar `sigelab.Main`, JDK 21, directorio de trabajo raíz del proyecto.
+7. Iniciar sesión con contraseña DEMO del README y rostro registrado. Se revalida usuario/rol y persiste LOGIN_EXITOSO antes de devolver sesión. Perfil ausente o servicio apagado no permite entrar.
 
-FACIAL_MATCH_THRESHOLD es obligatorio, finito y en (0,1]. No tiene default. El Integrante 8 debe calibrarlo con capturas del mismo usuario y de personas distintas. FACIAL_LIVENESS_THRESHOLD tiene valor inicial 0.80, pendiente de validación práctica. Modelo compatible: buffalo_l, 512 float32 little-endian. La captura conserva seis muestras válidas, calidad y promedio normalizado existentes; no se cambian por los valores particulares del proyecto de referencia.
+## Configuración compartida
 
-FACIAL_CAMERA_BACKEND=AUTO selecciona V4L2/Linux, DSHOW/Windows o AVFOUNDATION/macOS, con fallback ANY. FACIAL_CAMERA_INDEX selecciona cámara. FACIAL_CAPTURE_TIMEOUT limita captura (10–140 segundos; default 120), y el proceso tiene un límite adicional de 30 segundos para carga. Una carga lenta también deniega acceso, nunca omite el factor.
+Entorno real > `.env` raíz > `facial-service/.env`. Java lee solo entorno y `.env` raíz; Python lee ambos archivos sin interpolación. El configurador migra variables comunes antiguas y se detiene si encuentra claves distintas; no rota claves. No ejecutar `.env` con shell ni versionarlo (ya excluido por las reglas existentes).
 
-Windows: `py -3.12 -m venv .venv`, `.venv\Scripts\python -m pip install -r requirements-dev.txt`, configurar .env e iniciar `.venv\Scripts\python -m uvicorn app.main:app --host 127.0.0.1 --port 8765 --workers 1` desde facial-service. Instalar ODBC Driver y conceder permisos de cámara. macOS: usar Python 3.12 y los comandos equivalentes de Linux, el driver compatible con su arquitectura y permisos de cámara; OpenCV se ejecuta en MainThread de un proceso separado. Estas plataformas no han sido probadas en esta revisión.
+- Raíz: DB_HOST/PORT/NAME/USER/PASSWORD, DB_ENCRYPT/TRUST_SERVER_CERTIFICATE, FACIAL_API_URL y FACIAL_API_KEY.
+- Python: DB_DRIVER, FACIAL_ENCRYPTION_KEY, FACIAL_MATCH_THRESHOLD, FACIAL_LIVENESS_THRESHOLD, FACIAL_MODEL, FACIAL_CAMERA_INDEX/BACKEND y FACIAL_CAPTURE_TIMEOUT.
+- API_KEY aleatoria, al menos 32 caracteres; AES Base64 de 32 bytes, privada de Python. Mantener AES tras enrollment: una nueva no descifra perfiles antiguos. Nunca imprimir secretos.
+- El umbral 0.50 es solo un punto de partida configurable; debe calibrarse con el mismo usuario y otras personas. No elimina la exigencia de rostro y liveness válidos.
 
-## Versión Python del equipo
+## Python y dependencias
 
-Esta integración se estandariza en **Python 3.12.x**, no en cualquier versión superior a 3.11. `setup-facial-linux.sh`, `scripts/doctor.py` y el bootstrap rechazan otras versiones con un mensaje explícito. Doctor comprueba la versión antes de importar la configuración o dependencias del servicio. Los requirements se mantienen intactos, incluido numpy==2.5.4; no se adapta esta tarea a Python 3.11.
+Se acepta **Python 3.12–3.14** en setup, doctor y bootstrap. No se cambiaron versiones. `PYTHON_BIN` permite escoger intérprete al crear venv; los entornos existentes no se reemplazan. La aceptación del rango no garantiza instalación en todas las arquitecturas: setup verifica versiones/imports y doctor informa el paquete instalado y su Requires-Python.
 
-## Bootstrap del primer perfil ADMIN
+| Dependencia | Declaración actual | Evidencia publicada |
+|---|---|---|
+| numpy | 2.5.4 | Requires-Python >=3.12 |
+| onnxruntime | 1.31.1 | >=3.11; clasifica 3.12/3.13/3.14 |
+| opencv-python | 5.0.0.93 | >=3.6; clasifica 3.12/3.13/3.14 |
+| insightface | 2.1 | >=3.10; complemento liveness soportado |
+| bcrypt | 5.0.0 | No impone exclusividad 3.12 |
+| pyodbc, cryptography, fastapi, uvicorn | Sin pin (FastAPI >=0.115,<1) | Comprobar versión resuelta/Requires-Python con doctor al instalar |
 
-`enroll-user.sh` permite registrar el primer perfil facial de un ADMIN **ya existente y ACTIVO** en la base operativa SIGELAB antes de poder iniciar la primera sesión y administrar perfiles desde Usuarios. Es una operación administrativa local de enrollment, **no un bypass de autenticación**: no abre sesión, no devuelve una sesión y no cambia el login obligatorio de contraseña más rostro.
+Fuentes oficiales de metadatos: [NumPy 2.5.4](https://pypi.org/project/numpy/2.5.4/), [ONNX Runtime 1.31.1](https://pypi.org/project/onnxruntime/1.31.1/), [OpenCV 5.0.0.93](https://pypi.org/project/opencv-python/5.0.0.93/), [InsightFace 2.1](https://pypi.org/project/insightface/2.1/), [bcrypt 5.0.0](https://pypi.org/project/bcrypt/5.0.0/), [pyodbc](https://pypi.org/project/pyodbc/), [cryptography](https://pypi.org/project/cryptography/), [FastAPI](https://pypi.org/project/fastapi/), [Uvicorn](https://pypi.org/project/uvicorn/). Metadatos compatibles no sustituyen la prueba del motor/modelo/cámara en esta PC.
 
-Prerrequisitos: entorno Python 3.12 preparado, ODBC y configuración del servicio correctos, las tablas oficiales existentes, una cuenta ADMIN activa creada por el proceso normal de usuarios, clave AES persistente, FACIAL_API_KEY y threshold configurados, y FastAPI iniciado con `start-facial.sh`. El operador debe estar autorizado para administrar esa instalación y tener acceso a su configuración privada. Esta operación consulta SQL Server y activa la captura mediante el servicio: ejecutarla solo con autorización explícita.
+En el workspace inspeccionado: Python global 3.14.8 y NumPy 2.5.4; las demás dependencias anteriores no estaban instaladas, y faltaban venv, modelos y los dos .env. No se instaló ni se ejecutó cámara, SQL, enrollment o biometría durante esta preparación estática.
 
-Desde la raíz del proyecto, elegir exactamente una forma:
-
-```bash
-bash facial-service/enroll-user.sh --username nombre_admin
-bash facial-service/enroll-user.sh --id 7
-```
-
-Los valores son ejemplos: no se supone que un rol o usuario tenga un ID fijo. `--username` también permite desambiguar usernames numéricos. No pasar contraseñas ni claves como argumentos. El script usa FACIAL_API_KEY del entorno o de `facial-service/.env` cargado por app.config, con prioridad del entorno. FACIAL_API_URL tiene default `http://127.0.0.1:8765` y solo admite HTTP local; no se siguen redirecciones ni se utiliza proxy.
-
-El helper `scripts/enroll_user.py` resuelve el usuario con un SELECT parametrizado, relaciona Usuario.id_rol con Rol.id_rol y exige Usuario.estado=ACTIVO y Rol.nombre=ADMIN. Comprueba DB_NAME=SIGELAB y la base conectada; no admite TEST_FACE. Solo consulta ID, estado y nombre del rol, sin leer hashes. No inserta usuarios, no ejecuta DDL, no migra ni escribe directamente perfiles.
-
-Después envía `POST /face/enroll` con `userId` y `adminUserId` iguales al ID del ADMIN resuelto y `replace=false`, usando la cabecera X-Facial-Api-Key. El endpoint conserva todas sus comprobaciones, incluyendo revalidación administrativa antes del commit, calidad/liveness, cifrado y auditoría. Si ya existe perfil, se rechaza el intento; este script no ofrece reemplazo automático. El rol/estado pueden cambiar entre el SELECT y la llamada: el endpoint vuelve a validarlos y puede denegar la operación.
-
-La salida muestra únicamente estados e ID del usuario, sin secretos ni cuerpos HTTP. Un timeout o error no confirma registro; revisar status antes de reintentar. Una respuesta satisfactoria confirma el perfil persistido y permite intentar el login normal con contraseña y verificación facial. No repetir enrollment en cada login. La validación de un actor declarado mantiene el límite de confianza local documentado; no constituye autenticación criptográfica del proceso que ejecuta el script.
+Doctor por defecto revisa dependencias y configuración, sin SQL/cámara/modelo. Flags `--database`, `--camera`, `--model` activan esos diagnósticos expresamente; `--configuration-only` valida arranque sin abrir cámara ni SQL. La preparación Linux usa los tres diagnósticos y por ello debe ejecutarla el operador cuando esté listo. Requiere ODBC Driver 18/unixODBC, sesión gráfica, webcam libre y modelos/complemento liveness disponibles. No usar preparar_bd_face.py ni scripts TEST_FACE sobre SIGELAB.
 
 ## API y contratos Java
 
@@ -79,7 +77,7 @@ AES-GCM conserva SF1 + nonce aleatorio de 12 bytes + ciphertext/tag, con datos a
 
 El servidor mantiene exclusión de cámara durante toda la operación. Antes/después de captura se compara la versión del perfil (ID y ciphertext, solo en memoria) para rechazar reemplazos/eliminaciones concurrentes. El guardado revalida ADMIN y objetivo bajo bloqueos transaccionales y la unicidad SQL evita duplicados. La auditoría de mutación exitosa se confirma con el perfil; un error revierte ambos.
 
-AuditService conserva su política existente: registro general no transaccional de login es de mejor esfuerzo. LOGIN_FALLIDO de contraseña pertenece a UsuarioService; LOGIN_FALLIDO después de credenciales pertenece al servicio completo. LOGIN_EXITOSO solo se solicita después de facial y revalidación. Un fallo al persistir auditoría general puede dejar el evento ausente; no se cambió esa política compartida.
+La auditoría de login es obligatoria mediante `AuditService.registrarObligatorio`: persiste con el repositorio existente y propaga un error controlado si falla. LOGIN_FALLIDO de credenciales pertenece a UsuarioService; los rechazos posteriores pertenecen a AutenticacionService. LOGIN_EXITOSO se persiste después de FaceID y de revalidar usuario/rol, antes de devolver sesión. Si falla su persistencia, no se entrega sesión ni se solicita otro evento por el mismo fallo. Las sobrecargas general y transaccional existentes conservan sus contratos. No se inventan IDs para usuarios desconocidos. Ver [manual técnico](MANUAL_TECNICO.md).
 
 AuditoriaFacial registra inicio, éxito/fallo y causas controladas sin datos biométricos. Score/threshold se guardan al comparar. No se inventan usuarios para eventos que no pueden satisfacer su FK; errores previos a configuración/BD válida tampoco pueden garantizar auditoría SQL. Una caída de persistencia impide completar el resultado facial satisfactoriamente.
 
@@ -120,10 +118,10 @@ Como antecedente, una ejecución anterior a la ampliación administrativa tuvo 1
 
 El POM contiene una única declaración de Surefire **3.5.5** para JUnit 5, con exclusión explícita `**/*IT.java`. Las regresiones ejecutadas de **login, usuarios, auditoría y permisos no mostraron fallos**. Las pruebas Java validaron de forma aislada la coordinación del login en dos factores, la solicitud de LOGIN_EXITOSO después del facial y la revalidación, los rechazos de acceso, el cliente HTTP simulado, status/enroll/delete y permisos ADMIN. Esto no verifica persistencia SQL ni reconocimiento biométrico real.
 
-**Pytest continúa pendiente:** el entorno disponible solo tiene Python **3.14.8**, mientras que la integración se estandarizó en **Python 3.12.x**; además faltan pytest y varias dependencias. No se ejecutaron pruebas Python ni se preparó un entorno incompatible. Python conserva pruebas de cifrado, pipeline, similitud indirecta/enrollment, coordinación interna y agrega contratos operativos, autorización, transacciones, configuración y proceso simulado. pytest excluye por defecto los cinco módulos que escriben en SQL, antes de importarlos. Esos módulos también tienen skipUnless para unittest. SIGELAB_RUN_SQL_TESTS=1 es una activación deliberada, no autorización automática: solo habilitar tras permiso y con una BD de pruebas dedicada.
+**Pytest continúa pendiente:** la preparación actual acepta Python 3.12–3.14; el bloqueo histórico exclusivo a 3.12 se retiró tras revisar los metadatos de dependencias. No se ejecutó pytest ni se instalaron dependencias durante esta preparación estática. Instalar `requirements-dev.txt` en el venv antes de ejecutar pytest. Las pruebas que escriben SQL siguen requiriendo autorización y BD dedicada; `SIGELAB_RUN_SQL_TESTS=1` no constituye autorización por sí solo.
 
 La inspección previa al commit confirmó que `.env.docker` es un archivo **local, ignorado y no versionado**. Debe permanecer fuera del commit; no se reproduce su contenido.
 
-Siguen pendientes **pytest con Python 3.12, SQL Server real, cámara, liveness, calibración/configuración real del threshold y enrollment real**. La **validación FaceID end-to-end sigue pendiente**; los resultados Java aislados no permiten declararla completada.
+Siguen pendientes **pytest con Python compatible, SQL Server real, cámara, liveness, calibración/configuración real del threshold y enrollment real**. La **validación FaceID end-to-end sigue pendiente**; los resultados Java aislados no permiten declararla completada.
 
-Comandos para pruebas aisladas: desde facial-service y con un entorno Python 3.12 preparado, `.venv/bin/python -m pytest`; desde la raíz, `./mvnw test`. Ejecutarlos únicamente dentro de la autorización correspondiente. No usar selección de IT ni ejecutar scripts de registro/preparación sin revisar sus efectos. LoginControllerIT tiene FaceID simulado explícitamente y crea usuarios reales de prueba; está protegido por opt-in y no valida biometría real.
+Comandos para pruebas aisladas: desde facial-service y con un entorno Python 3.12–3.14 preparado, `.venv/bin/python -m pytest`; desde la raíz, `./mvnw test`. Ejecutarlos únicamente dentro de la autorización correspondiente. No usar selección de IT ni ejecutar scripts de registro/preparación sin revisar sus efectos. LoginControllerIT tiene FaceID simulado explícitamente y crea usuarios reales de prueba; está protegido por opt-in y no valida biometría real.

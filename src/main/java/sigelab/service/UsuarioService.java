@@ -98,7 +98,7 @@ public class UsuarioService {
 
         // Si no escribieron nada, ni vale la pena ir a la base
         if (username == null || username.isBlank() || passwordPlano == null) {
-            auditoria.registrar(null, "LOGIN_FALLIDO", "Usuario", null, "Credenciales rechazadas.");
+            auditoria.registrarObligatorio(null, "LOGIN_FALLIDO", "Usuario", null, "Credenciales rechazadas.");
             throw new BusinessException("Usuario o contraseña incorrectos");
         }
 
@@ -108,7 +108,7 @@ public class UsuarioService {
         // Si no existe, damos el mismo mensaje que con contraseña mala,
         // así nadie puede adivinar qué usernames existen
         if (encontrado.isEmpty()) {
-            auditoria.registrar(null, "LOGIN_FALLIDO", "Usuario", null, "Credenciales rechazadas.");
+            auditoria.registrarObligatorio(null, "LOGIN_FALLIDO", "Usuario", null, "Credenciales rechazadas.");
             throw new BusinessException("Usuario o contraseña incorrectos");
         }
         Usuario u = encontrado.get();
@@ -121,13 +121,13 @@ public class UsuarioService {
             passwordValido = false;
         }
         if (!passwordValido) {
-            auditoria.registrar(null, "LOGIN_FALLIDO", "Usuario", null, "Credenciales rechazadas.");
+            auditoria.registrarObligatorio(null, "LOGIN_FALLIDO", "Usuario", null, "Credenciales rechazadas.");
             throw new BusinessException("Usuario o contraseña incorrectos");
         }
 
         // Aunque la contraseña esté bien, un usuario que no está activo no entra
         if (u.getEstado() != EstadoUsuario.ACTIVO) {
-            auditoria.registrar(u.getIdUsuario(), "LOGIN_FALLIDO", "Usuario", u.getIdUsuario(), "Acceso rechazado: usuario inactivo.");
+            auditoria.registrarObligatorio(u.getIdUsuario(), "LOGIN_FALLIDO", "Usuario", u.getIdUsuario(), "Acceso rechazado: usuario inactivo.");
             throw new BusinessException("El usuario no está activo");
         }
 

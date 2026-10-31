@@ -75,6 +75,23 @@ class DevolucionTransaccionTest {
         assertFalse(error.getMessage().contains("SQL privado")); e.sinCambios();
         assertEquals(1,e.rollbacks); assertTrue(e.cerrada);
     }
+    @Test void cp14DevuelveDosDeTresEnUnaOperacionYConservaUnPendiente() {
+        Escenario e = new Escenario(3);
+        assertEquals(3, e.servicio.buscarPendientes(41,42).size());
+        int commitsAntes = e.commits;
+        var resultado = e.servicio.registrar(41, Map.of(101,CondicionDevolucion.BUENO,
+                102,CondicionDevolucion.DANADO), "CP-14", 42);
+        assertEquals(commitsAntes + 1,e.commits);
+        assertEquals(2, resultado.size()); assertEquals(2,e.devoluciones.size());
+        assertEquals(EstadoEquipo.DISPONIBLE,e.equipos.get(1));
+        assertEquals(EstadoEquipo.DANADO,e.equipos.get(2));
+        assertEquals(EstadoEquipo.PRESTADO,e.equipos.get(3));
+        assertFalse(e.devoluciones.containsKey(103));
+        assertEquals(EstadoPrestamo.ACTIVO,e.estado);
+        assertEquals(List.of(103),e.servicio.buscarPendientes(41,42).stream()
+                .map(p -> p.detalle().getIdDetallePrestamo()).toList());
+        assertEquals(0,e.rollbacks); assertEquals(2,e.eventos.size());
+    }
     @Test void d14DosEquiposSeConfirmanJuntosConCondicionesDistintas() {
         Escenario e = new Escenario(2);
         e.servicio.registrar(41,Map.of(102,CondicionDevolucion.DANADO,101,CondicionDevolucion.BUENO),"",42);

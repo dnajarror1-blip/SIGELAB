@@ -10,7 +10,10 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # Configuracion privada del servicio.
 ENV_FILE = BASE_DIR / ".env"
 
-load_dotenv(ENV_FILE, override=False)
+# Entorno real > .env raíz compartido > .env Python (compatibilidad local).
+# Sin interpolación: una contraseña con ${...} se conserva literalmente.
+load_dotenv(BASE_DIR.parent / ".env", override=False, interpolate=False)
+load_dotenv(ENV_FILE, override=False, interpolate=False)
 
 
 def get_database_config():

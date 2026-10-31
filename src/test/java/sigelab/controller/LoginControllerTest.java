@@ -78,7 +78,7 @@ class LoginControllerTest {
 
         var resultado = new LoginController(new AutenticacionService(servicio, new PermisoService(), id -> true,
                 new AuditService() {
-                    @Override public void registrar(Integer actor, String accion, String entidad, Integer id, String descripcion) { }
+                    @Override public void registrarObligatorio(Integer actor, String accion, String entidad, Integer id, String descripcion) { }
                 }))
                 .iniciarSesion("ana", "clave123");
 

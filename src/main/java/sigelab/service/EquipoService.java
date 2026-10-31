@@ -17,9 +17,13 @@ public class EquipoService {
     private final LaboratorioRepository laboratorioRepository;
 
     public EquipoService() {
-        this.equipoRepository = new EquipoRepository();
-        this.tipoEquipoRepository = new TipoEquipoRepository();
-        this.laboratorioRepository = new LaboratorioRepository();
+        this(new EquipoRepository(), new TipoEquipoRepository(), new LaboratorioRepository());
+    }
+
+    EquipoService(EquipoRepository equipos, TipoEquipoRepository tipos, LaboratorioRepository laboratorios) {
+        this.equipoRepository = equipos;
+        this.tipoEquipoRepository = tipos;
+        this.laboratorioRepository = laboratorios;
     }
 
 
@@ -65,7 +69,7 @@ public class EquipoService {
                     .buscarPorCodigoInventario(codigoLimpio)
                     .isPresent()) {
 
-                throw new IllegalArgumentException(
+                throw new sigelab.exception.BusinessException(
                         "Ya existe un equipo con ese código de inventario."
                 );
             }
