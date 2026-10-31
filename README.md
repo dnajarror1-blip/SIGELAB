@@ -35,6 +35,24 @@ Detalle: [RESPONSABILIDADES](docs/RESPONSABILIDADES.md) y [contrato](docs/TEAM_C
 - Java utiliza JDBC Microsoft, jBCrypt, ZXing, Gson y FlatLaf según `pom.xml`. La preparación necesita acceso a los repositorios de dependencias y modelos.
 
 
+## Arranque rápido en Windows
+
+Ver [guía Windows](docs/GUIA_WINDOWS.md) para requisitos, Docker y preparación SQL previa.
+
+```powershell
+.\facial-service\setup-facial-windows.ps1
+.\facial-service\configure-local-windows.ps1
+.\facial-service\prepare-demo-windows.ps1
+.\facial-service\start-facial-windows.ps1
+```
+
+En otra terminal, enrollment solo si el ADMIN existente aún no tiene perfil; después ejecutar Java:
+
+```powershell
+.\facial-service\enroll-user-windows.ps1 -Username admin.demo
+.\run-sigelab-windows.ps1
+```
+
 ## Primera ejecución
 
 Sobre esta base SIGELAB existente, sin recrearla:

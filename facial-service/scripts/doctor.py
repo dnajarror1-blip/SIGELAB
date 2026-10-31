@@ -54,7 +54,10 @@ def configuration():
         raise RuntimeError('Este arranque requiere 127.0.0.1:8765')
     import pyodbc
     if db['driver'] not in pyodbc.drivers():
+        if platform.system() == 'Windows':
+            print('Falta Microsoft ODBC Driver 18 for SQL Server. Instálelo y vuelva a ejecutar prepare-demo-windows.ps1.', file=sys.stderr)
         raise RuntimeError('Falta el driver ODBC configurado')
+    print('ODBC configurado y detectado:', db['driver'])
 
 
 def main():
@@ -72,7 +75,8 @@ def main():
     if (args.dependencies_only or args.configuration_only) and (args.database or args.camera or args.model):
         parser.error('Los modos only no admiten diagnósticos interactivos.')
     print('Plataforma:', platform.system(), platform.machine(), 'Python:', platform.python_version())
-    step = 'dependencias (ejecute setup-facial-linux.sh)'
+    setup = 'setup-facial-windows.ps1' if platform.system() == 'Windows' else 'setup-facial-linux.sh'
+    step = f'dependencias (ejecute {setup})'
     try:
         if not args.configuration_only:
             dependencies()
@@ -96,9 +100,11 @@ def main():
             step = 'cámara (permisos, sesión gráfica, índice y dispositivo libre)'
             if platform.system() == 'Linux' and not (os.getenv('DISPLAY') or os.getenv('WAYLAND_DISPLAY')):
                 raise RuntimeError('La captura necesita sesión gráfica')
+            print('Backend solicitado:', os.getenv('FACIAL_CAMERA_BACKEND', 'AUTO'))
             from app.camara import abrir_camara
             camera = abrir_camara()
             try:
+                print('Backend de cámara seleccionado:', camera.getBackendName())
                 ok, frame = camera.read()
                 if not ok or frame is None:
                     raise RuntimeError('Sin frames')
@@ -106,6 +112,8 @@ def main():
             finally:
                 camera.release()
     except Exception:
+        if args.camera and step.startswith('cámara') and platform.system() == 'Windows':
+            print('Cierre Teams/Zoom/Camera y revise FACIAL_CAMERA_INDEX. En Configuración de Windows > Privacidad (y seguridad) > Cámara, permita el acceso a la cámara y a las aplicaciones de escritorio. AUTO intenta DirectShow y después CAP_ANY; no se cambian permisos automáticamente.', file=sys.stderr)
         print('NO LISTO: fallo en ' + step + '. No se muestran datos privados.', file=sys.stderr)
         return 1
     return 0

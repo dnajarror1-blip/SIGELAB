@@ -55,7 +55,8 @@ def save_env(path, values):
                 if any(ord(c) < 32 for c in value):
                     raise ConfigurationError('No se admiten caracteres de control en configuración.')
                 stream.write(key + '=' + json.dumps(value, ensure_ascii=False) + '\n')
-        os.chmod(temporary, 0o600)
+        if os.name != 'nt':
+            os.chmod(temporary, 0o600)
         os.replace(temporary, path)
     finally:
         if os.path.exists(temporary):
@@ -121,7 +122,11 @@ def main():
         face.pop(key, None)
     save_env(FACE_ENV, face)  # Conservar primero la clave de perfiles existentes.
     save_env(ROOT_ENV, root)
-    print('Configuración guardada con permisos 0600. Claves conservadas/generadas sin mostrarlas.')
+    if os.name == 'nt':
+        print('Configuración guardada. Windows conserva las ACL del directorio; no se aplican permisos POSIX 0600.')
+    else:
+        print('Configuración guardada con permisos 0600.')
+    print('Claves conservadas/generadas sin mostrarlas.')
     print('Threshold inicial 0.50 solo si faltaba: requiere calibración real; no omite FaceID/liveness.')
 
 
