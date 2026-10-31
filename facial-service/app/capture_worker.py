@@ -9,20 +9,19 @@ import sys
 def main():
     # Todas las salidas de librerías van a stderr; stdout solo transporta el resultado en memoria.
     with contextlib.redirect_stdout(sys.stderr):
-        from .facial_enrollment import preparar_perfil_preliminar
-        from .facial_matching import calcular_similitud
         request = json.load(sys.stdin)
-        perfil = preparar_perfil_preliminar()
-        if perfil is None:
-            response = {"cancelled": True}
-        elif request["operation"] == "enroll":
-            response = dict(perfil)
-            response["embedding"] = base64.b64encode(perfil["embedding"]).decode("ascii")
+        if request["operation"] == "enroll":
+            from .facial_enrollment import preparar_perfil_preliminar
+            perfil = preparar_perfil_preliminar()
+            if perfil is None:
+                response = {"cancelled": True}
+            else:
+                response = dict(perfil)
+                response["embedding"] = base64.b64encode(perfil["embedding"]).decode("ascii")
         elif request["operation"] == "verify":
+            from .facial_verification import capturar_verificacion
             registered = base64.b64decode(request["embedding"], validate=True)
-            response = {"cancelled": False, "livenessPassed": True,
-                        "livenessScore": perfil["liveness_promedio"],
-                        "score": calcular_similitud(registered, perfil["embedding"])}
+            response = capturar_verificacion(registered)
         else:
             raise ValueError("Operación no válida")
     return response
@@ -44,4 +43,7 @@ if __name__ == "__main__":
             response = {"error": code}
             exit_code = 1
         output.write(json.dumps(response, allow_nan=False))
-    sys.exit(exit_code)
+    # El protocolo ya está escrito y cerrado, y la captura liberó cámara/GUI.
+    # Terminar este proceso dedicado también detiene un análisis nativo pendiente:
+    # sys.exit esperaría al hilo ONNX incluso después de cancelar o agotar tiempo.
+    os._exit(exit_code)

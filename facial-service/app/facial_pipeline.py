@@ -74,7 +74,7 @@ def _obtener_analizador():
     return analizador
 
 
-def analizar_captura_facial(imagen, embedding_registrado):
+def analizar_captura_facial(imagen, embedding_registrado, *, exigir_calidad=False):
     """
     Analiza una imagen y devuelve resultados diagnosticos.
 
@@ -159,6 +159,29 @@ def analizar_captura_facial(imagen, embedding_registrado):
                 "livenessScore": round(puntuacion, 4),
                 "similarity": None
             }
+
+        if exigir_calidad:
+            # Misma calidad mínima de captura; sin cargar otro motor ni modificar enrollment.
+            import cv2
+            confianza = float(rostro.det_score)
+            if not math.isfinite(confianza) or not .70 <= confianza <= 1:
+                raise ValueError("Deteccion facial poco confiable")
+            alto, ancho = imagen.shape[:2]
+            bbox = np.asarray(rostro.bbox, dtype=float)
+            if bbox.shape != (4,) or not np.all(np.isfinite(bbox)):
+                raise ValueError("Posicion facial no valida")
+            x1, y1, x2, y2 = bbox.astype(int)
+            x1, y1 = max(0, x1), max(0, y1)
+            x2, y2 = min(ancho, x2), min(alto, y2)
+            if min(x2 - x1, y2 - y1) < 90:
+                raise ValueError("Acercate un poco a la camara")
+            gris = cv2.cvtColor(imagen[y1:y2, x1:x2], cv2.COLOR_BGR2GRAY)
+            brillo = float(np.mean(gris))
+            nitidez = float(cv2.Laplacian(gris, cv2.CV_64F).var())
+            if not math.isfinite(brillo) or not 45 <= brillo <= 220:
+                raise ValueError("Ajusta la iluminacion")
+            if not math.isfinite(nitidez) or nitidez < 30:
+                raise ValueError("La imagen esta borrosa")
 
         # La captura supero la comprobacion
         # de presencia real.
