@@ -1,5 +1,7 @@
 package sigelab.config;
 
+import sigelab.exception.DatabaseConfigurationException;
+
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.SQLException;
@@ -15,7 +17,7 @@ public class DatabaseConfig {
         String port = getConfig("DB_PORT", "1433");
         String database = getConfig("DB_NAME", "SIGELAB");
         String user = getConfig("DB_USER", "sa");
-        String password = System.getenv("DB_PASSWORD");
+        String password = LocalConfig.get("DB_PASSWORD");
 
         String encrypt = getConfig("DB_ENCRYPT", "true");
         String trustCertificate = getConfig(
@@ -23,7 +25,7 @@ public class DatabaseConfig {
         );
 
         if (password == null || password.isBlank()) {
-            throw new IllegalStateException(
+            throw new DatabaseConfigurationException(
                     "Falta configurar DB_PASSWORD"
             );
         }
@@ -37,7 +39,7 @@ public class DatabaseConfig {
     }
 
     private static String getConfig(String name, String defaultValue) {
-        String value = System.getenv(name);
+        String value = LocalConfig.get(name);
         return (value == null || value.isBlank())
                 ? defaultValue
                 : value;

@@ -3,6 +3,7 @@ package sigelab.service;
 
 import org.junit.jupiter.api.Test;
 import sigelab.model.Auditoria;
+import sigelab.exception.DataAccessException;
 import sigelab.repository.AuditoriaRepository;
 
 import java.lang.reflect.Proxy;
@@ -41,8 +42,8 @@ class AuditServiceTransaccionalTest {
                 }
         );
 
-        IllegalStateException error = assertThrows(
-                IllegalStateException.class,
+        DataAccessException error = assertThrows(
+                DataAccessException.class,
                 () -> servicio.registrar(
                         1,
                         "INICIAR_MANTENIMIENTO",

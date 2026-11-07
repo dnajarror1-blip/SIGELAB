@@ -1,8 +1,10 @@
 package sigelab;
 
+import sigelab.view.LoginForm;
+
 public class Main {
 
     public static void main(String[] args) {
-        System.out.println("SIGELAB iniciado correctamente");
+        LoginForm.main(args);
     }
 }

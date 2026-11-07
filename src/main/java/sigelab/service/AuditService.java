@@ -3,7 +3,9 @@ package sigelab.service;
 import java.sql.Connection;
 import java.sql.SQLException;
 import java.time.LocalDateTime;
-import java.util.Collections;
+import sigelab.exception.BusinessException;
+import sigelab.exception.DataAccessException;
+import sigelab.config.DatabaseConfig;
 import java.util.List;
 
 import sigelab.model.Auditoria;
@@ -19,6 +21,23 @@ public class AuditService {
 
     public AuditService(AuditoriaRepository auditoriaRepository) {
         this.auditoriaRepository = auditoriaRepository;
+    }
+
+    public void validarAcceso(Connection conn, int idUsuario, Modulo modulo) throws SQLException {
+        var rol = auditoriaRepository.buscarRolUsuarioActivo(conn, idUsuario)
+                .orElseThrow(() -> new BusinessException("Debe iniciar sesión con un usuario activo."));
+        if (!new PermisoService().modulosDe(rol).contains(modulo)) {
+            throw new BusinessException("No tiene permiso para acceder a " + modulo + ".");
+        }
+    }
+
+    public void validarConsulta(Integer idUsuario, Modulo modulo) {
+        if (idUsuario == null || idUsuario <= 0) throw new BusinessException("Debe iniciar sesión.");
+        try (Connection conn = DatabaseConfig.getConnection()) {
+            validarAcceso(conn, idUsuario, modulo);
+        } catch (SQLException e) {
+            throw new DataAccessException("No se pudo verificar el permiso de consulta.", e);
+        }
     }
 
     /**
@@ -47,10 +66,18 @@ public class AuditService {
             auditoriaRepository.guardar(auditoria);
 
         } catch (Exception e) {
-            System.err.println(
-                    "[ADVERTENCIA-AUDITORIA] No se pudo persistir el log de auditoria: "
-                            + e.getMessage()
-            );
+            System.err.println("[ADVERTENCIA-AUDITORIA] No se pudo persistir el evento de auditoría.");
+        }
+    }
+
+    /** Auditoría obligatoria: el repositorio administra y cierra su propia conexión. */
+    public void registrarObligatorio(Integer idUsuario, String accion, String entidad,
+                                     Integer idRegistro, String descripcion) {
+        try {
+            auditoriaRepository.guardar(new Auditoria(idUsuario, LocalDateTime.now(),
+                    accion, entidad, idRegistro, descripcion));
+        } catch (SQLException | DataAccessException | sigelab.exception.DatabaseConfigurationException error) {
+            throw new DataAccessException("No se pudo registrar la auditoría obligatoria. Acceso denegado.", error);
         }
     }
 
@@ -90,7 +117,7 @@ public class AuditService {
             auditoriaRepository.guardar(auditoria, conn);
 
         } catch (SQLException e) {
-            throw new IllegalStateException(
+            throw new DataAccessException(
                     "No se pudo registrar la auditoría de la transacción.",
                     e
             );
@@ -104,13 +131,8 @@ public class AuditService {
         try {
             return auditoriaRepository.listarTodos();
 
-        } catch (Exception e) {
-            System.err.println(
-                    "[ERROR-AUDITORIA] Error al consultar historial de auditoria: "
-                            + e.getMessage()
-            );
-
-            return Collections.emptyList();
+        } catch (SQLException e) {
+            throw new DataAccessException("No se pudo consultar la auditoría.", e);
         }
     }
 
@@ -129,13 +151,8 @@ public class AuditService {
                     idUsuario
             );
 
-        } catch (Exception e) {
-            System.err.println(
-                    "[ERROR-AUDITORIA] Error al filtrar historial de auditoria: "
-                            + e.getMessage()
-            );
-
-            return Collections.emptyList();
+        } catch (SQLException e) {
+            throw new DataAccessException("No se pudo filtrar la auditoría.", e);
         }
     }
 }
